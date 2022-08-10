@@ -7,7 +7,10 @@ import traceback
 from concurrent.futures import ThreadPoolExecutor
 from multiprocessing import Process
 
+import tornado.httpserver
 import tornado.ioloop
+import tornado.netutil
+import tornado.process
 import tornado.web
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import joinedload
@@ -32,9 +35,6 @@ from keylime.failure import MAX_SEVERITY_LABEL, Component, Failure
 from keylime.ima import ima
 
 logger = keylime_logging.init_logging("cloudverifier")
-
-# mTLS configuration to connect to the agent
-mtls_options = None
 
 
 try:
@@ -270,6 +270,7 @@ class AgentsHandler(BaseHandler):
                 logger.error("GET received an invalid agent ID: %s", agent_id)
                 return
 
+            agent = None
             try:
                 agent = (
                     session.query(VerfierMain)
@@ -350,6 +351,7 @@ class AgentsHandler(BaseHandler):
             logger.error("DELETE received an invalid agent ID: %s", agent_id)
             return
 
+        agent = None
         try:
             agent = session.query(VerfierMain).filter_by(agent_id=agent_id).first()
         except SQLAlchemyError as e:
@@ -361,7 +363,7 @@ class AgentsHandler(BaseHandler):
             return
 
         verifier_id = config.get(
-            "cloud_verifier", "cloudverifier_id", fallback=cloud_verifier_common.DEFAULT_VERIFIER_ID
+            "verifier", "uuid", fallback=cloud_verifier_common.DEFAULT_VERIFIER_ID
         )
         if verifier_id != agent.verifier_id:
             web_util.echo_json_response(self, 404, "agent id associated to this verifier")
@@ -445,7 +447,7 @@ class AgentsHandler(BaseHandler):
                             allowlist = ima.unbundle_ima_policy(
                                 ima_policy_bundle,
                                 verify=config.getboolean(
-                                    "cloud_verifier", "require_allow_list_signatures", fallback=False
+                                    "verifier", "require_allow_list_signatures", fallback=False
                                 ),
                             )
                             ima_policy = json.dumps(ima.process_ima_policy(allowlist, ima_policy_bundle["excllist"]))
@@ -534,10 +536,10 @@ class AgentsHandler(BaseHandler):
                     agent_data["next_ima_ml_entry"] = 0
                     agent_data["learned_ima_keyrings"] = {}
                     agent_data["verifier_id"] = config.get(
-                        "cloud_verifier", "cloudverifier_id", fallback=cloud_verifier_common.DEFAULT_VERIFIER_ID
+                        "verifier", "uuid", fallback=cloud_verifier_common.DEFAULT_VERIFIER_ID
                     )
-                    agent_data["verifier_ip"] = config.get("cloud_verifier", "cloudverifier_ip")
-                    agent_data["verifier_port"] = config.get("cloud_verifier", "cloudverifier_port")
+                    agent_data["verifier_ip"] = config.get("verifier", "ip")
+                    agent_data["verifier_port"] = config.get("verifier", "port")
                     agent_data["attestation_count"] = 0
 
                     # TODO: Always error for v1.0 version after initial upgrade
@@ -570,13 +572,10 @@ class AgentsHandler(BaseHandler):
                             agent_data[key] = val
 
                         # Prepare SSLContext for mTLS connections
-                        agent_mtls_cert_enabled = config.getboolean(
-                            "cloud_verifier", "agent_mtls_cert_enabled", fallback=False
-                        )
-                        mtls_cert = agent_data["mtls_cert"]
                         agent_data["ssl_context"] = None
-                        if agent_mtls_cert_enabled and mtls_cert:
-                            agent_data["ssl_context"] = web_util.generate_agent_mtls_context(mtls_cert, mtls_options)
+                        if agent_data["mtls_cert"] and agent_data["mtls_cert"] != "disabled":
+                            agent_data["ssl_context"] = web_util.generate_agent_tls_context(
+                                    "verifier", agent_data["mtls_cert"], logger=logger)
 
                         if agent_data["ssl_context"] is None:
                             logger.warning("Connecting to agent without mTLS: %s", agent_id)
@@ -628,7 +627,7 @@ class AgentsHandler(BaseHandler):
 
             try:
                 verifier_id = config.get(
-                    "cloud_verifier", "cloudverifier_id", fallback=cloud_verifier_common.DEFAULT_VERIFIER_ID
+                    "verifier", "uuid", fallback=cloud_verifier_common.DEFAULT_VERIFIER_ID
                 )
                 agent = session.query(VerfierMain).filter_by(agent_id=agent_id, verifier_id=verifier_id).one()
             except SQLAlchemyError as e:
@@ -644,7 +643,10 @@ class AgentsHandler(BaseHandler):
                 if not isinstance(agent, dict):
                     agent = _from_db_obj(agent)
                 if agent["mtls_cert"] and agent["mtls_cert"] != "disabled":
-                    agent["ssl_context"] = web_util.generate_agent_mtls_context(agent["mtls_cert"], mtls_options)
+                    agent["ssl_context"] = web_util.generate_agent_tls_context("verifier", agent["mtls_cert"], logger=logger)
+                if agent["ssl_context"] is None:
+                    logger.warning("Connecting to agent without mTLS: %s", agent_id)
+
                 agent["operational_state"] = states.START
                 asyncio.ensure_future(process_agent(agent, states.GET_QUOTE))
                 web_util.echo_json_response(self, 200, "Success")
@@ -796,7 +798,7 @@ class AllowlistHandler(BaseHandler):
             try:
                 allowlist = ima.unbundle_ima_policy(
                     ima_policy_bundle,
-                    verify=config.getboolean("cloud_verifier", "require_allow_list_signatures", fallback=False),
+                    verify=config.getboolean("verifier", "require_allow_list_signatures", fallback=False),
                 )
                 ima_policy = json.dumps(ima.process_ima_policy(allowlist, ima_policy_bundle["excllist"]))
             except ima.SignatureValidationError as e:
@@ -993,7 +995,7 @@ async def notify_error(agent, msgtype="revocation", event=None):
         revocation_notifier.notify(tosend)
     if "agent" in notifiers:
         verifier_id = config.get(
-            "cloud_verifier", "cloudverifier_id", fallback=cloud_verifier_common.DEFAULT_VERIFIER_ID
+            "verifier", "uuid", fallback=cloud_verifier_common.DEFAULT_VERIFIER_ID
         )
         session = get_session()
         agents = session.query(VerfierMain).filter_by(verifier_id=verifier_id).all()
@@ -1005,7 +1007,8 @@ async def notify_error(agent, msgtype="revocation", event=None):
                 if agent_db_obj.agent_id != agent["agent_id"]:
                     agent = _from_db_obj(agent_db_obj)
                     if agent["mtls_cert"] and agent["mtls_cert"] != "disabled":
-                        agent["ssl_context"] = web_util.generate_agent_mtls_context(agent["mtls_cert"], mtls_options)
+                        agent["ssl_context"] = web_util.generate_agent_tls_context(
+                                "verifier", agent["mtls_cert"], logger=logger)
                 func = functools.partial(invoke_notify_error, agent, tosend)
                 futures.append(await loop.run_in_executor(pool, func))
             # Wait for all tasks complete in 60 seconds
@@ -1116,7 +1119,7 @@ async def process_agent(agent, new_operational_state, failure=Failure(Component.
             and new_operational_state == states.GET_QUOTE
         ):
             agent["num_retries"] = 0
-            interval = config.getfloat("cloud_verifier", "quote_interval")
+            interval = config.getfloat("verifier", "quote_interval")
             agent["operational_state"] = states.GET_QUOTE
             if interval == 0:
                 await invoke_get_quote(agent, ima_policy, False)
@@ -1128,9 +1131,9 @@ async def process_agent(agent, new_operational_state, failure=Failure(Component.
                 agent["pending_event"] = pending
             return
 
-        maxr = config.getint("cloud_verifier", "max_retries")
-        interval = config.getfloat("cloud_verifier", "retry_interval")
-        exponential_backoff = config.getboolean("cloud_verifier", "exponential_backoff")
+        maxr = config.getint("verifier", "max_retries")
+        interval = config.getfloat("verifier", "retry_interval")
+        exponential_backoff = config.getboolean("verifier", "exponential_backoff")
 
         if main_agent_operational_state == states.GET_QUOTE and new_operational_state == states.GET_QUOTE_RETRY:
             if agent["num_retries"] >= maxr:
@@ -1203,7 +1206,10 @@ async def activate_agents(verifier_id, verifier_ip, verifier_port):
             agent.verifier_host = verifier_port
             agent_run = _from_db_obj(agent)
             if agent_run["mtls_cert"] and agent_run["mtls_cert"] != "disabled":
-                agent_run["ssl_context"] = web_util.generate_agent_mtls_context(agent_run["mtls_cert"], mtls_options)
+                if not agent_run["ssl_context"]:
+                    agent_run["ssl_context"] = web_util.generate_agent_tls_context("verifier",
+                            agent_run["mtls_cert"], logger=logger)
+
             if agent.operational_state == states.START:
                 asyncio.ensure_future(process_agent(agent_run, states.GET_QUOTE))
             if agent.boottime:
@@ -1222,10 +1228,10 @@ def main():
     """Main method of the Cloud Verifier Server.  This method is encapsulated in a function for packaging to allow it to be
     called as a function by an external program."""
 
-    cloudverifier_port = config.get("cloud_verifier", "cloudverifier_port")
-    cloudverifier_host = config.get("cloud_verifier", "cloudverifier_ip")
+    cloudverifier_port = config.get("verifier", "port")
+    cloudverifier_host = config.get("verifier", "ip")
     cloudverifier_id = config.get(
-        "cloud_verifier", "cloudverifier_id", fallback=cloud_verifier_common.DEFAULT_VERIFIER_ID
+        "verifier", "uuid", fallback=cloud_verifier_common.DEFAULT_VERIFIER_ID
     )
 
     # Check if measured boot was configured correctly
@@ -1235,8 +1241,8 @@ def main():
 
     # allow tornado's max upload size to be configurable
     max_upload_size = None
-    if config.has_option("cloud_verifier", "max_upload_size"):
-        max_upload_size = int(config.get("cloud_verifier", "max_upload_size"))
+    if config.has_option("verifier", "max_upload_size"):
+        max_upload_size = int(config.get("verifier", "max_upload_size"))
 
     # set a conservative general umask
     os.umask(0o077)
@@ -1262,19 +1268,8 @@ def main():
     # print out API versions we support
     keylime_api_version.log_api_versions(logger)
 
-    context, server_mtls_options = web_util.init_mtls(logger=logger)
-
-    # Check for user defined CA to connect to agent
-    agent_mtls_cert = config.get("cloud_verifier", "agent_mtls_cert", fallback=None)
-    agent_mtls_private_key = config.get("cloud_verifier", "agent_mtls_private_key", fallback=None)
-    agent_mtls_private_key_pw = config.get("cloud_verifier", "agent_mtls_private_key_pw", fallback=None)
-
-    # Only set custom options if the cert should not be the same as used by the verifier
-    global mtls_options
-    if agent_mtls_cert == "CV":
-        mtls_options = server_mtls_options
-    else:
-        mtls_options = (agent_mtls_cert, agent_mtls_private_key, agent_mtls_private_key_pw)
+    # Get the server TLS context
+    ssl_ctx = web_util.init_mtls("verifier", logger=logger)
 
     app = tornado.web.Application(
         [
@@ -1290,7 +1285,7 @@ def main():
     def server_process(task_id):
         logger.info("Starting server of process %s", task_id)
         engine.dispose()
-        server = tornado.httpserver.HTTPServer(app, ssl_options=context, max_buffer_size=max_upload_size)
+        server = tornado.httpserver.HTTPServer(app, ssl_options=ssl_ctx, max_buffer_size=max_upload_size)
         server.add_sockets(sockets)
 
         def server_sig_handler(*_):
@@ -1335,11 +1330,11 @@ def main():
     if run_revocation_notifier:
         logger.info(
             "Starting service for revocation notifications on port %s",
-            config.getint("cloud_verifier", "revocation_notifier_port"),
+            config.getint("verifier", "zmq_port", section="revocations"),
         )
         revocation_notifier.start_broker()
 
-    num_workers = config.getint("cloud_verifier", "multiprocessing_pool_num_workers")
+    num_workers = config.getint("verifier", "num_workers")
     if num_workers <= 0:
         num_workers = tornado.process.cpu_count()
     for task_id in range(0, num_workers):

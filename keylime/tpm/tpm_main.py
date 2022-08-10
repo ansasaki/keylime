@@ -57,11 +57,11 @@ class tpm(tpm_abstract.AbstractTPM):
         self.supported["sign"] = set()
 
         # Grab which default algs the config requested
-        defaultHash = config.get("cloud_agent", "tpm_hash_alg")
-        defaultEncrypt = config.get("cloud_agent", "tpm_encryption_alg")
-        defaultSign = config.get("cloud_agent", "tpm_signing_alg")
+        defaultHash = config.getlist("agent", "tpm_hash_alg")
+        defaultEncrypt = config.getlist("agent", "tpm_encryption_alg")
+        defaultSign = config.getlist("agent", "tpm_signing_alg")
 
-        ek_handle = config.get("cloud_agent", "ek_handle")
+        ek_handle = config.get("agent", "ek_handle")
 
         if self.need_hw_tpm:
             if ek_handle == "generate":
@@ -72,23 +72,27 @@ class tpm(tpm_abstract.AbstractTPM):
             self.__get_tpm_algorithms()
 
             # Ensure TPM supports the defaults requested
-            if defaultHash not in self.supported["hash"]:
-                raise Exception(f"Unsupported hash algorithm specified: {str(defaultHash)}!")
-            if defaultEncrypt not in self.supported["encrypt"]:
-                raise Exception(f"Unsupported encryption algorithm specified: {str(defaultEncrypt)}!")
-            if defaultSign not in self.supported["sign"]:
-                raise Exception(f"Unsupported signing algorithm specified: {str(defaultSign)}!")
+            for h in defaultHash:
+                if h not in self.supported["hash"]:
+                    raise Exception(f"Unsupported hash algorithm specified: {str(defaultHash)}!")
+
+            for e in defaultEncrypt:
+                if e not in self.supported["encrypt"]:
+                    raise Exception(f"Unsupported encryption algorithm specified: {str(defaultEncrypt)}!")
+            for s in defaultSign:
+                if s not in self.supported["sign"]:
+                    raise Exception(f"Unsupported signing algorithm specified: {str(defaultSign)}!")
 
             enabled_pcrs = self.__get_pcrs()
-            if not enabled_pcrs.get(str(defaultHash)):
+            if not enabled_pcrs.get(str(",".join(defaultHash))):
                 raise Exception(f"No PCR banks enabled for hash algorithm specified: {defaultHash}")
         else:
             # Assume their defaults are sane?
             pass
 
-        self.defaults["hash"] = algorithms.Hash(defaultHash)
-        self.defaults["encrypt"] = defaultEncrypt
-        self.defaults["sign"] = defaultSign
+        self.defaults["hash"] = algorithms.Hash(",".join(defaultHash))
+        self.defaults["encrypt"] = ",".join(defaultEncrypt)
+        self.defaults["sign"] = ",".join(defaultSign)
         self.defaults["ek_handle"] = ek_handle
 
     def __get_tpm2_tools(self):
@@ -208,12 +212,12 @@ class tpm(tpm_abstract.AbstractTPM):
                 reterr, "Error validating calculated PCR composite with quote"
             ):
                 numtries += 1
-                maxr = config.getint("cloud_agent", "max_retries")
+                maxr = config.getint("agent", "max_retries")
                 if numtries >= maxr:
                     logger.error("Agent did not return proper quote due to PCR race condition.")
                     break
-                interval = config.getfloat("cloud_agent", "retry_interval")
-                exponential_backoff = config.getboolean("cloud_agent", "exponential_backoff")
+                interval = config.getfloat("agent", "retry_interval")
+                exponential_backoff = config.getboolean("agent", "exponential_backoff")
                 next_retry = retry.retry_time(exponential_backoff, interval, numtries, logger)
                 logger.info(
                     "Failed to get quote %d/%d times, trying again in %f seconds...", numtries, maxr, next_retry

@@ -19,10 +19,18 @@ class DBEngineManager:
         """
         To use: engine = self.make_engine('cloud_verifier')
         """
+
+        # Keep DB related stuff as it is, but read configuration from new
+        # configs
+        if service == "cloud_verifier":
+            config_service = "verifier"
+        else:
+            config_service = service
+
         self.service = service
 
         try:
-            p_sz_m_ovfl = config.get(service, "database_pool_sz_ovfl")
+            p_sz_m_ovfl = config.get(config_service, "database_pool_sz_ovfl")
             p_sz, m_ovfl = p_sz_m_ovfl.split(",")
         except NoOptionError:
             p_sz = 5
@@ -30,46 +38,34 @@ class DBEngineManager:
 
         engine_args = {}
 
-        url = config.get(service, "database_url")
+        url = config.get(config_service, "database_url")
         if url:
             logger.info("database_url is set, using it to establish database connection")
-            if not url.count("sqlite:"):
-                engine_args["pool_size"] = int(p_sz)
-                engine_args["max_overflow"] = int(m_ovfl)
 
-        else:
-            logger.info("database_url is not set, using multi-parameter database configuration options")
+            # If the keyword sqlite is provided as the database url, use the
+            # cv_data.sqlite for the verifier or the file reg_data.sqlite for
+            # the registrar, located at the config.WORK_DIR directory
+            if url == "sqlite":
+                logger.info("database_url is set as 'sqlite' keyword, using "
+                            "default values to establish database connection")
+                if service == "cloud_verifier":
+                    database = "cv_data.sqlite"
+                elif service == "registrar":
+                    database = "reg_data.sqlite"
+                else:
+                    logger.error("Tried to setup database access for unknown service '%s'", service)
+                    raise Exception(f"Unknown service '{service}' for database setup")
 
-            # This code shall be removed once we fully deprecate the old format
-            try:
-                drivername = config.get(service, "drivername")
-                database = config.get(service, "database")
-                logger.warning(
-                    'Deprecation reminder: please add the suffix "database_" to all database-related parameters in your keylime.conf.'
-                )
-                p_n_prefix = ""
-            except NoOptionError:
-                drivername = config.get(service, "database_drivername")
-                p_n_prefix = "database_"
-                database = config.get(service, p_n_prefix + "name")
+                database_file = os.path.abspath(os.path.join(config.WORK_DIR, database))
+                url = f"sqlite:///{database_file}"
 
-            if drivername == "sqlite":
-                database_file = os.path.join(config.WORK_DIR, database)
                 kl_dir = os.path.dirname(os.path.abspath(database_file))
                 if not os.path.exists(kl_dir):
                     os.makedirs(kl_dir, 0o700)
 
-                url = URL(drivername=drivername, username=None, password=None, host=None, database=(database_file))
                 engine_args["connect_args"] = {"check_same_thread": False}
 
-            else:
-                url = URL(
-                    drivername=drivername,
-                    username=config.get(service, p_n_prefix + "username"),
-                    password=config.get(service, p_n_prefix + "password"),
-                    host=config.get(service, p_n_prefix + "host"),
-                    database=database,
-                )
+            if not url.count("sqlite:"):
                 engine_args["pool_size"] = int(p_sz)
                 engine_args["max_overflow"] = int(m_ovfl)
 
