@@ -91,12 +91,29 @@ def init_tls_dir(component, logger=None):
         if not os.path.exists(tls_dir):
             os.makedirs(tls_dir, 0o700)
 
+        password = config.get(component, "server_key_password")
+        if not password:
+            password = None
+        elif password == "default":
+            if logger:
+                logger.warning("Using 'default' server_key_password option for "
+                               "%s", component)
+        else:
+            password = str(password)
+
+        ca_util.setpassword(password)
         ca_util.cmd_init(tls_dir)
-        ca_util.cmd_mkcert(tls_dir, "server")
+        ca_util.cmd_mkcert(tls_dir, "server", password=password)
 
         if component == "verifier":
+            password = config.get(component, "client_key_password")
+            if not password:
+                password = None
+            else:
+                password = str(password)
+
             # The verifier also needs client key/certificate to access the agent
-            ca_util.cmd_mkcert(tls_dir, "client")
+            ca_util.cmd_mkcert(tls_dir, "client", password=password)
 
     elif tls_dir == "default":
         # Use the keys/certificates generated for the verifier
@@ -117,6 +134,7 @@ def generate_tls_context(
     certificate,
     private_key,
     trusted_ca,
+    private_key_password=None,
     verify_peer_cert=True,
     is_client=False,
     ca_cert_string=None,
@@ -156,7 +174,8 @@ def generate_tls_context(
         else:
             context.options &= ~ssl.OP_NO_TLSv1_2
 
-        context.load_cert_chain(certfile=certificate, keyfile=private_key)
+        context.load_cert_chain(certfile=certificate, keyfile=private_key,
+                password=private_key_password)
 
         if verify_peer_cert:
             if not trusted_ca and not ca_cert_string:
@@ -209,8 +228,8 @@ def get_tls_options(component, is_client=False, logger=None):
     certificate should be verified.
 
     :returns: A tuple in format (certificate, private key, list
-    of trusted CA certificates) and a Boolean indicating if the peer certificate
-    should be verified
+    of trusted CA certificates, key password) and a Boolean indicating if the
+    peer certificate should be verified
     """
 
     tls_dir = get_tls_dir(component)
@@ -250,9 +269,12 @@ def get_tls_options(component, is_client=False, logger=None):
     if not cert:
         cert = None
         if logger:
-            logger.warning(f"No value provided in {role}_cert option for {component}")
+            logger.warning("No value provided in %s_cert option for %s", role,
+                           component)
     elif cert == "default":
         cert = os.path.abspath(os.path.join(tls_dir, f"{role}-cert.crt"))
+        if logger:
+            logger.info("Using default %s_cert option for %s", role, component)
     else:
         if not os.path.isabs(cert):
             cert = os.path.abspath(os.path.join(tls_dir, cert))
@@ -260,15 +282,26 @@ def get_tls_options(component, is_client=False, logger=None):
     key = config.get(component, f"{role}_key")
     if not key:
         if logger:
-            logger.warning(f"No value provided in {role}_key option for {component}")
+            logger.warning("No value provided in %s_key option for %s", role,
+                           component)
         key = None
     elif key == "default":
         key = os.path.abspath(os.path.join(tls_dir, f"{role}-private.pem"))
+        if logger:
+            logger.info("Using default %s_key option for %s", role, component)
     else:
         if not os.path.isabs(key):
             key = os.path.join(tls_dir, key)
 
-    return (cert, key, trusted_ca), verify_peer_certificate
+    password = config.get(component, f"{role}_key_password")
+    if not password:
+        if logger:
+            logger.info("No value provided in %s_key_password option "
+                        "for %s, assuming the key is unencrypted",
+                        role, component)
+        password = None
+
+    return (cert, key, trusted_ca, password), verify_peer_certificate
 
 
 def generate_agent_tls_context(component, cert_blob, logger=None):
@@ -285,7 +318,7 @@ def generate_agent_tls_context(component, cert_blob, logger=None):
     if not agent_mtls_enabled:
         return None
 
-    (cert, key, trusted_ca), verify_server = get_tls_options(component,
+    (cert, key, trusted_ca, key_password), verify_server = get_tls_options(component,
                                                              is_client=True,
                                                              logger=logger)
 
@@ -307,6 +340,7 @@ def generate_agent_tls_context(component, cert_blob, logger=None):
 
         context = generate_tls_context(
             cert, key, trusted_ca,
+            private_key_password=key_password,
             verify_peer_cert=verify_server,
             is_client=True, logger=logger
         )
@@ -331,11 +365,11 @@ def init_mtls(component, logger=None):
     # requested
     tls_dir = init_tls_dir(component, logger=logger)
 
-    (cert, key, trusted_ca), verify_client = get_tls_options(component, logger=logger)
+    (cert, key, trusted_ca, pw), verify_client = get_tls_options(component, logger=logger)
 
     # Generate the server TLS context
-    return generate_tls_context(cert, key, trusted_ca,
-            verify_peer_cert=verify_client, logger=logger)
+    return generate_tls_context(cert, key, trusted_ca, private_key_password=pw,
+                                verify_peer_cert=verify_client, logger=logger)
 
 
 def echo_json_response(handler, code, status=None, results=None):
