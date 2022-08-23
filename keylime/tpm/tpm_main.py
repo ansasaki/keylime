@@ -867,6 +867,9 @@ class tpm(tpm_abstract.AbstractTPM):
                 retDict = self.__run(["tpm2_getcap", "-c", "properties-fixed"])
             elif self.tools_version in ["4.0", "4.2"]:
                 retDict = self.__run(["tpm2_getcap", "properties-fixed"])
+            else:
+                raise Exception("Unsupported tools version: %s", self.tools_version)
+
             output = retDict["retout"]
             reterr = retDict["reterr"]
             code = retDict["code"]
