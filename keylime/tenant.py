@@ -142,8 +142,11 @@ class Tenant:
         # Set up PCR values
         if "tpm_policy" in args and args["tpm_policy"] is not None:
             tpm_policy = args["tpm_policy"]
-            self.tpm_policy = TPM_Utilities.readPolicy(tpm_policy)
-            logger.info("TPM PCR Mask from policy is %s", self.tpm_policy["mask"])
+        else:
+            # Use default TPM policy
+            tpm_policy = '{"22":["0000000000000000000000000000000000000001","0000000000000000000000000000000000000000000000000000000000000001","000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001","ffffffffffffffffffffffffffffffffffffffff","ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff","ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"],"15":["0000000000000000000000000000000000000000","0000000000000000000000000000000000000000000000000000000000000000","000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"]}'
+        self.tpm_policy = TPM_Utilities.readPolicy(tpm_policy)
+        logger.info("TPM PCR Mask from policy is %s", self.tpm_policy["mask"])
 
         if len(args.get("ima_sign_verification_keys")) > 0:
             # Auto-enable IMA (or-bit mask)
@@ -178,6 +181,9 @@ class Tenant:
         # Read command-line path string IMA exclude list
         excl_data = None
         if "ima_exclude" in args and args["ima_exclude"] is not None:
+            if args["ima_exclude"] == "default":
+                args["ima_exclude"] = "exclude.txt"
+
             if isinstance(args["ima_exclude"], str):
                 excl_data = ima.read_excllist(args["ima_exclude"])
             elif isinstance(args["ima_exclude"], list):
