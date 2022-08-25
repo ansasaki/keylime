@@ -14,7 +14,7 @@
   discover:
     how: fmf
     url: https://github.com/RedHat-SP-Security/keylime-tests
-    ref: main
+    ref: new-config
     test:
      - /setup/configure_tpm_emulator
      - /setup/install_upstream_keylime
