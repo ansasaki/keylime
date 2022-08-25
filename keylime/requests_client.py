@@ -3,7 +3,10 @@ import tempfile
 
 import requests
 from requests.adapters import HTTPAdapter
-from requests.packages.urllib3.poolmanager import PoolManager  # pylint: disable=import-error
+try:
+    from urllib3.poolmanager import PoolManager  # pylint: disable=import-error
+except ImportError:
+    from requests.packages.urllib3.poolmanager import PoolManager  # pylint: disable=import-error
 
 
 class RequestsClient:
