@@ -5,29 +5,29 @@
 version = {{ logging.version }}
 
 [loggers]
-keys = {{ logging.loggers_keys }}
+keys = {{ loggers.get('keys') }}
 
 [handlers]
-keys = {{ logging.handlers_keys }}
+keys = {{ handlers.get('keys') }}
 
 [formatters]
-keys = {{ logging.formatters_keys }}
+keys = {{ formatters.get('keys') }}
 
 [formatter_formatter]
-format = {{ logging.formatter_formatter_format }}
-datefmt = {{ logging.formatter_formatter_datefmt }}
+format = {{ formatter_formatter.format }}
+datefmt = {{ formatter_formatter.datefmt }}
 
 [logger_root]
-level = {{ logging.logger_root_level }}
-handlers = {{ logging.logger_root_handlers }}
+level = {{ logger_root.level }}
+handlers = {{ logger_root.handlers }}
 
 [handler_consoleHandler]
-class = {{ logging.handler_consoleHandler_class }}
-level = {{ logging.handler_consoleHandler_level }}
-formatter = {{ logging.handler_consoleHandler_formatter }}
-args = {{ logging.handler_consoleHandler_args }}
+class = {{ handler_consoleHandler.class }}
+level = {{ handler_consoleHandler.level }}
+formatter = {{ handler_consoleHandler.formatter }}
+args = {{ handler_consoleHandler.args }}
 
 [logger_keylime]
-level = {{ logging.logger_keylime_level }}
-qualname = {{ logging.logger_keylime_qualname }}
-handlers = {{ logging.logger_keylime_handlers }}
+level = {{ logger_keylime.level }}
+qualname = {{ logger_keylime.qualname }}
+handlers = {{ logger_keylime.handlers }}
