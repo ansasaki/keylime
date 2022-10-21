@@ -386,8 +386,8 @@ def main():
         "--templates",
         help="Path to the directory containing "
         "the templates for the configuration files. If not "
-        'provided "./templates" is used',
-        default="./templates",
+        'provided "/usr/share/keylime/templates" is used',
+        default="/usr/share/keylime/templates",
     )
 
     parser.add_argument("--version", help="Target version for the output " "configuration files", default=None)
