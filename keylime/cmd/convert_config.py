@@ -1,5 +1,17 @@
 #!/usr/bin/env python3
 
+import argparse
+import configparser
+import importlib.util
+import json
+import os
+import re
+import shutil
+import sys
+from functools import cmp_to_key
+
+from jinja2 import Template
+
 """
  This script parses the content of a configuration file and use the data to
  replace the values in templates to generate new configuration files.  The
@@ -77,15 +89,6 @@
  versions of the configuration, allowing the user to easily convert from a
  version of the configuration file to the next.
 """
-
-import argparse
-import configparser
-import importlib.util
-import json
-import os
-import re
-
-from jinja2 import Template
 
 COMPONENTS = ["agent", "verifier", "tenant", "registrar", "ca", "logging"]
 
@@ -170,6 +173,13 @@ def output_component(component, config, template, outfile):
     Output the configuration file for a component
     """
 
+    if os.path.exists(outfile):
+        try:
+            shutil.copyfile(outfile, outfile + ".bkp")
+        except Exception as e:
+            print(f"Could not create backup file {outfile + '.bkp'}, aborting...")
+            return
+
     print(f"Writing {component} configuration to {outfile}")
 
     with open(template, "r", encoding="utf-8") as tf:
@@ -188,18 +198,6 @@ def output(components, config, templates, outdir):
     Output the requested files using a template
     """
 
-    flat = [s for ss in components for s in ss]
-
-    if not flat:
-        # If no component was provided, use all available
-        components = COMPONENTS
-    else:
-        clean = set(flat)
-        for c in clean:
-            if not c in COMPONENTS:
-                print(f"Unknown component {c}, skipping")
-        components = list(clean.intersection(COMPONENTS))
-
     # Check that there are templates for all components
     for component in components:
         version = config[component]["version"]
@@ -217,7 +215,15 @@ def output(components, config, templates, outdir):
         output_component(component, config, t, o)
 
 
-def process_mapping(old_config, templates, mapping_file, debug=False, target=None):
+def needs_update(component, old_config, new_version):
+    if component in old_config and "version" in old_config[component]:
+        old_version = str_to_version(old_config[component]["version"])
+        if old_version >= new_version:
+            return False
+    return True
+
+
+def process_mapping(components, old_config, templates, mapping_file, debug=False, target=None):
     """
     Apply the transformations from the provided mapping file to the
     configuration dictionary
@@ -238,6 +244,10 @@ def process_mapping(old_config, templates, mapping_file, debug=False, target=Non
     new_version = str_to_version(mapping["version"])
     if not new_version:
         raise Exception(f"Invalid version number in mapping: {mapping['version']}")
+
+    if not any(map(lambda c: needs_update(c, old_config, new_version), components)):
+        print(f"Skipping version {mapping['version']}")
+        return old_config
 
     # Search for the directory containing the templates for the version set in
     # the mapping
@@ -356,7 +366,7 @@ def str_to_version(v_str):
     return tuple(int(x) for x in m.group(1, 2))
 
 
-def process_versions(templates, old_config, target_version=None, debug=False):
+def process_versions(components, templates, old_config, target_version=None, debug=False):
     """
     Apply the transformations from the mappings for each version found in the
     templates folder to the configuration.
@@ -391,7 +401,7 @@ def process_versions(templates, old_config, target_version=None, debug=False):
             m = os.path.join(p, "mapping.json")
             if os.path.isfile(m):
                 # Apply transformation for the mapping
-                new = process_mapping(old_config, templates, m, debug=debug, target=target)
+                new = process_mapping(components, old_config, templates, m, debug=debug, target=target)
                 old_config = new
             else:
                 raise Exception(f"Could not find mapping {m}")
@@ -413,7 +423,8 @@ def main():
         help="Select the components for which "
         "configuration files should be generated. If not "
         "provided, generate configuration files for all "
-        "components. Can be provided multiple times",
+        "components. Can be provided multiple times. "
+        "If provided, files will be generated even when up-to-date",
         default=[],
         action="append",
         nargs="+",
@@ -438,7 +449,14 @@ def main():
     )
 
     parser.add_argument(
-        "--out", help="Output directory where to put the generated files. Default is current directory", default="."
+        "--out",
+        help="Output directory where to put the generated files. "
+        "If the user is root, the default path is '/etc/keylime', otherwise "
+        "the current directory is used. If provided, the files will be "
+        "generated even when the configuration is up-to-date. If the output "
+        "files exist, backup files are created to preserve the previous "
+        "content.",
+        default="",
     )
 
     parser.add_argument(
@@ -476,11 +494,31 @@ def main():
 
     args = parser.parse_args()
 
-    if not os.path.exists(args.out):
-        raise Exception(f"Output directory {args.out} does not exist")
+    if not args.out:
+        if os.geteuid() == 0:
+            out_dir = "/etc/keylime"
+        else:
+            out_dir = "."
+    else:
+        out_dir = args.out
 
-    if not os.path.isdir(args.out):
-        raise Exception(f"File {args.out} is not a directory")
+    if not os.path.exists(out_dir):
+        raise Exception(f"Output directory {out_dir} does not exist")
+
+    if not os.path.isdir(out_dir):
+        raise Exception(f"File {out_dir} is not a directory")
+
+    component_list = [s for ss in args.component for s in ss]
+
+    if not component_list:
+        # If no component was provided, use all available
+        components = COMPONENTS
+    else:
+        clean = set(component_list)
+        for c in clean:
+            if not c in COMPONENTS:
+                print(f"Unknown component {c}, skipping")
+        components = list(clean.intersection(COMPONENTS))
 
     if args.version and not str_to_version(args.version):
         raise Exception(f"Invalid version {args.version} specified in --version: " f"Expected 'MAJOR.MINOR' format")
@@ -502,16 +540,24 @@ def main():
     if args.mapping:
         if os.path.isfile(args.mapping):
             mapping_file = args.mapping
+
             # Apply the single mapping provided
-            config = process_mapping(old_config, args.templates, mapping_file, debug=args.debug)
+            config = process_mapping(components, old_config, args.templates, mapping_file, debug=args.debug)
         else:
             raise Exception(f"Could not find provided mapping {args.mapping}")
     else:
         # Apply transformations from the templates in the templates directory
         # If a target version is provided, stop when reaching the target
-        config = process_versions(args.templates, old_config, target_version=args.version, debug=args.debug)
+        config = process_versions(components, args.templates, old_config, target_version=args.version, debug=args.debug)
 
-    output(args.component, config, args.templates, args.out)
+    if config != old_config:
+        output(components, config, args.templates, out_dir)
+    else:
+        print("Configuration is up-to-date")
+        if args.out or component_list:
+            # If the output directory or component list were specified, write the files even when
+            # up-to-date
+            output(components, config, args.templates, out_dir)
 
 
 if __name__ == "__main__":
