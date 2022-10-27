@@ -200,7 +200,7 @@ def output(components, config, templates, outdir):
 
     # Check that there are templates for all components
     for component in components:
-        version = config[component]["version"]
+        version = config[component]["version"].strip('" ')
         version_dir = os.path.join(templates, version)
         if not os.path.isdir(version_dir):
             raise Exception(f"Could not find directory {version_dir}")
@@ -357,6 +357,9 @@ def str_to_version(v_str):
     :returns: Tuple with version number parts converted to int. In case of
     invalid version string, returns None
     """
+
+    # Strip to remove eventual quotes and spaces
+    v_str = v_str.strip('" ')
 
     m = re.match(r"^(\d+)\.(\d+)$", v_str)
 

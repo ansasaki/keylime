@@ -12,6 +12,8 @@ def str_to_version(v_str):
     invalid version string, returns None
     """
 
+    v_str = v_str.strip().strip('"').strip()
+
     m = re.match(r"^(\d+)\.(\d+)$", v_str)
 
     if not m:
