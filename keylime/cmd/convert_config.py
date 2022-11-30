@@ -7,6 +7,8 @@ import json
 import os
 import re
 import shutil
+from configparser import RawConfigParser
+from typing import List, Optional, Tuple, Union
 
 from jinja2 import Template
 
@@ -131,7 +133,7 @@ if "KEYLIME_LOGGING_CONFIG" in os.environ:
     CONFIG_FILES.insert(0, os.environ["KEYLIME_LOGGING_CONFIG"])
 
 
-def get_config(config_files):
+def get_config(config_files: List[List[str]]) -> RawConfigParser:
     """
     Read configuration files and merge them together
     """
@@ -139,34 +141,34 @@ def get_config(config_files):
     flat = [s for ss in config_files for s in ss]
     if not flat:
         print(f"No input provided: using {CONFIG_FILES} as input")
-        config_files = list(x for x in CONFIG_FILES if os.path.exists(x))
+        files = list(x for x in CONFIG_FILES if os.path.exists(x))
     else:
-        config_files = list(x for x in set(flat) if os.path.exists(x))
-        if not config_files:
+        files = list(x for x in set(flat) if os.path.exists(x))
+        if not files:
             raise Exception(f"None of the provided files in {set(flat)} exist")
 
-    if not config_files:
+    if not files:
         # The configuration files doesn't exist, try old file
         print("Could not find configuration files, trying to find old configuration")
-        config_files = list(x for x in OLD_CONFIG_FILES if os.path.exists(x))
+        files = list(x for x in OLD_CONFIG_FILES if os.path.exists(x))
 
     config = configparser.RawConfigParser()
-    if not config_files:
+    if not files:
         print("Could not find configuration files in default locations. Using default values for all options")
     else:
         # Validate that at least one config file was successfully read
-        read_files = config.read(config_files)
+        read_files = config.read(files)
         if read_files:
             print(f"Successfully read configuration from {read_files}")
         else:
             raise Exception(
-                f"Could not parse any configuration from {config_files}, please check the files syntax and permissions"
+                f"Could not parse any configuration from {files}, please check the files syntax and permissions"
             )
 
     return config
 
 
-def output_component(component, config, template, outfile):
+def output_component(component: str, config: RawConfigParser, template: str, outfile: str) -> None:
     """
     Output the configuration file for a component
     """
@@ -191,7 +193,7 @@ def output_component(component, config, template, outfile):
             print(r, file=o)
 
 
-def output(components, config, templates, outdir):
+def output(components: List[str], config: RawConfigParser, templates: str, outdir: str) -> None:
     """
     Output the requested files using a template
     """
@@ -213,15 +215,22 @@ def output(components, config, templates, outdir):
         output_component(component, config, t, o)
 
 
-def needs_update(component, old_config, new_version):
+def needs_update(component: str, old_config: RawConfigParser, new_version: Tuple[int, int]) -> bool:
     if component in old_config and "version" in old_config[component]:
         old_version = str_to_version(old_config[component]["version"])
-        if old_version >= new_version:
+        if old_version and old_version >= new_version:
             return False
     return True
 
 
-def process_mapping(components, old_config, templates, mapping_file, debug=False, target=None):
+def process_mapping(
+    components: List[str],
+    old_config: RawConfigParser,
+    templates: str,
+    mapping_file: str,
+    debug: Optional[bool] = False,
+    target: Optional[Tuple[int, int]] = None,
+) -> RawConfigParser:
     """
     Apply the transformations from the provided mapping file to the
     configuration dictionary
@@ -289,13 +298,13 @@ def process_mapping(components, old_config, templates, mapping_file, debug=False
 
         # Skip versions lower than the current version
         if old_version >= new_version:
-            new[component] = dict(old_config[component])
+            new[component] = old_config[component]
             continue
 
         # Stop if the version reached the target
         if target:
             if old_version >= target:
-                new[component] = dict(old_config[component])
+                new[component] = old_config[component]
                 continue
 
         # Create a new dictionary for each component
@@ -350,7 +359,7 @@ def process_mapping(components, old_config, templates, mapping_file, debug=False
     return new
 
 
-def str_to_version(v_str):
+def str_to_version(v_str: str) -> Union[Tuple[int, int], None]:
     """
     Validates the string format and converts the provided string to a tuple of
     ints which can be sorted and compared.
@@ -370,7 +379,13 @@ def str_to_version(v_str):
     return tuple(int(x) for x in m.group(1, 2))
 
 
-def process_versions(components, templates, old_config, target_version=None, debug=False):
+def process_versions(
+    components: List[str],
+    templates: str,
+    old_config: RawConfigParser,
+    target_version: Optional[str] = None,
+    debug: Optional[bool] = False,
+) -> RawConfigParser:
     """
     Apply the transformations from the mappings for each version found in the
     templates folder to the configuration.
@@ -396,7 +411,7 @@ def process_versions(components, templates, old_config, target_version=None, deb
         if not target in versions:
             raise Exception(f"Directory for target version {target_version} not " f"found in {templates}")
 
-    new = {}
+    new = configparser.RawConfigParser()
 
     for version in versions:
         # Find the mapping file for the version and apply
@@ -419,7 +434,7 @@ def process_versions(components, templates, old_config, target_version=None, deb
     return new
 
 
-def main():
+def main() -> None:
     parser = argparse.ArgumentParser(description="Split keylime configuration" "file into individual files")
 
     parser.add_argument(

@@ -1,9 +1,11 @@
 import ast
 import configparser
 import re
+from configparser import RawConfigParser
+from typing import Dict, List, Optional, Tuple
 
 
-def str_to_version(v_str):
+def str_to_version(v_str: str) -> (Tuple[int, int] | None):
     """
     Validates the string format and converts the provided string to a tuple of
     ints which can be sorted and compared.
@@ -22,7 +24,7 @@ def str_to_version(v_str):
     return tuple(int(x) for x in m.group(1, 2))
 
 
-def adjust(config, mapping):  # pylint: disable=unused-argument
+def adjust(config: RawConfigParser, mapping: Dict) -> None:  # pylint: disable=unused-argument
     """
     Process the configuration intermediary representation adjusting some of the
     values following changes to the configuration files semantics.
