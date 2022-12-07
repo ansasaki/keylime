@@ -49,6 +49,20 @@ def adjust(config, mapping) -> None:  # pylint: disable=unused-argument
         }
     }
 
+    # Dictionary mapping all boolean values that need to be changed to lower
+    # case (for TOML output)
+    booleans = {
+        "components": {
+            "agent": [
+                "enable_agent_mtls",
+                "extract_payload_zip",
+                "enable_revocation_notifications",
+                "enable_insecure_payload",
+                "exponential_backoff",
+            ]
+        }
+    }
+
     # Dictionary defining values to convert to lists
     tolist = {
         "components": {
@@ -142,6 +156,17 @@ def adjust(config, mapping) -> None:  # pylint: disable=unused-argument
                     config[component][option] = f"{v}"
 
                 print(f"[{component}] For option '{option}', converted '{value}' to " f"'{config[component][option]}'")
+
+        # Replace boolean values with the lowercase value (for TOML output)
+        if component in booleans["components"].keys():
+            options = booleans["components"][component]
+            # For each option
+            for option in options:
+                # If the option is present in the configuration
+                if config[component] and option in config[component]:
+                    # Replace the value with lowecase form
+                    config[component][option] = config[component][option].lower()
+                    print(f'[{component}] In "{option}", converted to lower case')
 
         # Other special adjustments
 

@@ -223,6 +223,13 @@ def needs_update(component, old_config, new_version) -> bool:
             return False
     return True
 
+def strip_quotes(config):
+    """
+    Remove surrounding spaces and quotes from all options
+    """
+    for k in config:
+        for o in config[k]:
+            config[k][o] = config[k][o].strip('" ')
 
 def process_mapping(components, old_config, templates, mapping_file, debug=False, target=None) -> RawConfigParser:
     """
@@ -248,6 +255,8 @@ def process_mapping(components, old_config, templates, mapping_file, debug=False
 
     if not any(map(lambda c: needs_update(c, old_config, new_version), components)):
         print(f"Skipping version {mapping['version']}")
+        # Strip quotes in case the old config was a TOML file
+        strip_quotes(old_config)
         return old_config
 
     # Search for the directory containing the templates for the version set in
@@ -320,6 +329,9 @@ def process_mapping(components, old_config, templates, mapping_file, debug=False
 
         # Set the resulting version for the component
         new[component]["version"] = mapping["version"]
+
+    # Strip quotes from all options
+    strip_quotes(new)
 
     # If there is an adjust script, load and run it
     adjust_script = os.path.abspath(os.path.join(version_dir, "adjust.py"))

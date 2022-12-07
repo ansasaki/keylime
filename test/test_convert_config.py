@@ -379,6 +379,20 @@ class TestConvertConfig(unittest.TestCase):
         self.assertEqual(convert_config.str_to_version(' "12.34" '), (12, 34))
         self.assertEqual(convert_config.str_to_version('"   12.34"   '), (12, 34))
 
+    def testStripQuotes(self) -> None:
+        """Test stripping surrounding quotes and spaces from config"""
+        config = configparser.RawConfigParser()
+        config.add_section("comp1")
+        config["comp1"]["test_option"] = '"unquoted"'
+        config.add_section("comp2")
+        config["comp2"]["test_option"] = '   " unquoted  """"'
+
+        # Strip surrounding quotes and spaces from all options
+        convert_config.strip_quotes(config)
+
+        self.assertEqual(config.get("comp1", "test_option"), "unquoted")
+        self.assertEqual(config.get("comp2", "test_option"), "unquoted")
+
     def testProcessVersionsUsingTOML(self) -> None:
         """Test that using TOML files as old configs does not break"""
         toml = os.path.join(CONFIG_DIR, "comp1.toml")
@@ -389,3 +403,34 @@ class TestConvertConfig(unittest.TestCase):
         result = convert_config.process_versions(["comp1"], TEMPLATES_DIR, config)
         self.assertEqual(result.get("comp1", "version"), "3.0")
         self.assertEqual(result.get("comp1", "test_option"), "current")
+        self.assertEqual(result.get("comp1", "test_adjust"), "adjusted 3.0")
+        self.assertEqual(result.get("subcomp1", "suboption"), "current")
+
+        # Output file using template with quotes on every string (TOML)
+        template_path = os.path.join(DATA_DIR, "template-with-quotes.j2")
+        self.assertTrue(os.path.exists(template_path))
+
+        with tempfile.TemporaryDirectory() as tempdir:
+            outfile = os.path.join(tempdir, "output.conf")
+            convert_config.output_component("comp1", result, template_path, outfile)
+
+            # Check that the file was correctly generated
+            self.assertTrue(os.path.exists(outfile))
+
+            quoted = configparser.ConfigParser()
+            l = quoted.read(outfile)
+            self.assertTrue(outfile in l)
+            template = os.path.join(TEMPLATES_DIR)
+
+            # Check that reading config directly the quotes are still present
+            self.assertEqual(quoted.get("comp1", "test_option"), '"current"')
+            self.assertEqual(quoted.get("comp1", "test_adjust"), '"adjusted 3.0"')
+            self.assertEqual(quoted.get("subcomp1", "suboption"), '"current"')
+
+            result = convert_config.process_versions(["comp1"],
+                                                     TEMPLATES_DIR, quoted)
+
+            # Check that the result doesn't come with surrounding quotes
+            self.assertEqual(result.get("comp1", "test_option"), "current")
+            self.assertEqual(result.get("comp1", "test_adjust"), "adjusted 3.0")
+            self.assertEqual(result.get("subcomp1", "suboption"), "current")
