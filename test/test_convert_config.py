@@ -6,6 +6,7 @@ import tempfile
 import unittest
 from contextlib import contextmanager
 from io import StringIO
+from typing import Generator
 
 from keylime.cmd import convert_config
 
@@ -17,7 +18,7 @@ COMPONENTS = ["comp1", "comp2"]
 
 
 @contextmanager
-def captured_output():
+def captured_output() -> Generator[tuple[StringIO, StringIO], None, None]:
     new_out, new_err = StringIO(), StringIO()
     old_out, old_err = sys.stdout, sys.stderr
     try:
@@ -28,15 +29,15 @@ def captured_output():
 
 
 class TestConvertConfig(unittest.TestCase):
-    def setUp(self):
+    def setUp(self) -> None:
         # Set configuration files used for testing
         convert_config.CONFIG_FILES = list(os.path.join(CONFIG_DIR, f"{comp}.conf") for comp in COMPONENTS)
         convert_config.OLD_CONFIG_FILES = list(os.path.join(CONFIG_DIR, f"{comp}_old.conf") for comp in COMPONENTS)
 
-    def tearDown(self):
+    def tearDown(self) -> None:
         importlib.reload(convert_config)
 
-    def testGetConfig(self):
+    def testGetConfig(self) -> None:
         """Sanity test for get_config()"""
 
         existing_path = os.path.join(CONFIG_DIR, "comp1_exist.conf")
@@ -49,7 +50,7 @@ class TestConvertConfig(unittest.TestCase):
         # Check that the file was correctly parsed
         self.assertEqual(value, "existing")
 
-    def testGetConfigNoInput(self):
+    def testGetConfigNoInput(self) -> None:
         """Test get_config() without providing input"""
 
         # Provide no input
@@ -60,13 +61,13 @@ class TestConvertConfig(unittest.TestCase):
 
         self.assertEqual(value, "current")
 
-    def testGetConfigNoneExisting(self):
+    def testGetConfigNoneExisting(self) -> None:
         """Test get_config() where none of the files exist"""
 
         # Provide non-existing files as input and expect exception
         self.assertRaises(Exception, convert_config.get_config, "non-existing.conf")
 
-    def testGetConfigOld(self):
+    def testGetConfigOld(self) -> None:
         """Test get_config() when it should fall back to old file"""
 
         # Set CONFIG_FILES to non existing files
@@ -80,7 +81,7 @@ class TestConvertConfig(unittest.TestCase):
 
         self.assertEqual(value, "old")
 
-    def testGetConfigDefault(self):
+    def testGetConfigDefault(self) -> None:
         """Test get_config() when it should use default values"""
 
         # Set CONFIG_FILES to non existing files
@@ -98,7 +99,7 @@ class TestConvertConfig(unittest.TestCase):
         self.assertEqual(list(config.keys()), ["DEFAULT"])
         self.assertEqual(len(list(config.items("DEFAULT"))), 0)
 
-    def testOutputComponent(self):
+    def testOutputComponent(self) -> None:
         """Test that given a config and template, the output is generated"""
 
         template_path = os.path.join(TEMPLATES_DIR, "2.0/comp1.j2")
@@ -128,7 +129,7 @@ class TestConvertConfig(unittest.TestCase):
             self.assertEqual(generated.get("comp1", "test_adjust"), "generated")
             self.assertEqual(generated.get("subcomp1", "suboption"), "generated")
 
-    def testOutputNoVersion(self):
+    def testOutputNoVersion(self) -> None:
         """Test that if the version doesn't exist, the output fails"""
 
         # Provide config where the template for a given component version
@@ -141,7 +142,7 @@ class TestConvertConfig(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tempdir:
             self.assertRaises(Exception, convert_config.output, ["comp1"], config, TEMPLATES_DIR, tempdir)
 
-    def testOutputNoTemplate(self):
+    def testOutputNoTemplate(self) -> None:
         """Test that if the template is not available, the output fails"""
 
         # Provide config where the version directory exists, but the template
@@ -154,7 +155,7 @@ class TestConvertConfig(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tempdir:
             self.assertRaises(Exception, convert_config.output, ["comp3"], config, TEMPLATES_DIR, tempdir)
 
-    def testOutput(self):
+    def testOutput(self) -> None:
         """Sanity test for output()"""
 
         # Create a configuration
@@ -179,7 +180,7 @@ class TestConvertConfig(unittest.TestCase):
             self.assertEqual(generated.get("comp1", "test_adjust"), "generated")
             self.assertEqual(generated.get("subcomp1", "suboption"), "generated")
 
-    def testNeedsUpdate(self):
+    def testNeedsUpdate(self) -> None:
         """Test needs_update()"""
 
         config = configparser.RawConfigParser()
@@ -192,7 +193,7 @@ class TestConvertConfig(unittest.TestCase):
         self.assertTrue(convert_config.needs_update("comp1", config, (3, 0)))
         self.assertFalse(convert_config.needs_update("comp1", config, (2, 0)))
 
-    def testProcessMapping(self):
+    def testProcessMapping(self) -> None:
         """Sanity test for process_mapping()"""
 
         # Use default configuration files
@@ -223,32 +224,32 @@ class TestConvertConfig(unittest.TestCase):
         # number is used
         self.assertTrue("No version found in old configuration for comp1, using '1.0'" in out.getvalue())
 
-    def testProcessNonExistingMapping(self):
+    def testProcessNonExistingMapping(self) -> None:
         """Check that non-existing mapping raises Exception"""
         config = configparser.RawConfigParser()
         self.assertRaises(
             Exception, convert_config.process_mapping, COMPONENTS, config, TEMPLATES_DIR, "non-existing-mapping"
         )
 
-    def testProcessMappingNoVersion(self):
+    def testProcessMappingNoVersion(self) -> None:
         """Check that mapping without version raises Exception"""
         config = configparser.RawConfigParser()
         mapping = os.path.join(MAPPINGS_DIR, "no-version.json")
         self.assertRaises(Exception, convert_config.process_mapping, COMPONENTS, config, TEMPLATES_DIR, mapping)
 
-    def testProcessMappingNoComponents(self):
+    def testProcessMappingNoComponents(self) -> None:
         """Check that mapping without components raises exception"""
         config = configparser.RawConfigParser()
         mapping = os.path.join(MAPPINGS_DIR, "no-components.json")
         self.assertRaises(Exception, convert_config.process_mapping, COMPONENTS, config, TEMPLATES_DIR, mapping)
 
-    def testProcessMappingInvalidVersion(self):
+    def testProcessMappingInvalidVersion(self) -> None:
         """Check that invalid version number (not parseable) raises exception"""
         config = configparser.RawConfigParser()
         mapping = os.path.join(MAPPINGS_DIR, "invalid-version.json")
         self.assertRaises(Exception, convert_config.process_mapping, COMPONENTS, config, TEMPLATES_DIR, mapping)
 
-    def testProcessMappingAlreadyUpdated(self):
+    def testProcessMappingAlreadyUpdated(self) -> None:
         """Check that if all components are updated, the process is short
         circuited and returns earlier"""
         config = configparser.RawConfigParser()
@@ -264,7 +265,7 @@ class TestConvertConfig(unittest.TestCase):
         # Check that the output shows that the updated version was skipped
         self.assertTrue("Skipping version 3.0" in out.getvalue())
 
-    def testProcessMappingMissingVersion(self):
+    def testProcessMappingMissingVersion(self) -> None:
         """Check that missing version in templates directory raises exception"""
         config = configparser.RawConfigParser()
         mapping = os.path.join(MAPPINGS_DIR, "sanity.json")
@@ -274,7 +275,7 @@ class TestConvertConfig(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tempdir:
             self.assertRaises(Exception, convert_config.process_mapping, COMPONENTS, config, tempdir, mapping)
 
-    def testProcessMappingInvalidComponentVersion(self):
+    def testProcessMappingInvalidComponentVersion(self) -> None:
         """Check that if a component in the config does not have a parseable
         version, it raises exception
         """
@@ -286,7 +287,7 @@ class TestConvertConfig(unittest.TestCase):
         mapping = os.path.join(MAPPINGS_DIR, "sanity.json")
         self.assertRaises(Exception, convert_config.process_mapping, COMPONENTS, config, TEMPLATES_DIR, mapping)
 
-    def testProcessMappingMissingAdjustMethod(self):
+    def testProcessMappingMissingAdjustMethod(self) -> None:
         """Check that adjust script without adjust() method it raises
         exception
         """
@@ -304,7 +305,7 @@ class TestConvertConfig(unittest.TestCase):
 
         self.assertRaises(Exception, convert_config.process_mapping, COMPONENTS, config, template, mapping)
 
-    def testProcessMappingInvalidAdjustFile(self):
+    def testProcessMappingInvalidAdjustFile(self) -> None:
         """Check that invalid file as adjust script raises exception (not python
         loadable)
         """
@@ -322,7 +323,7 @@ class TestConvertConfig(unittest.TestCase):
 
         self.assertRaises(Exception, convert_config.process_mapping, COMPONENTS, config, template, mapping)
 
-    def testProcessMappingAdjustException(self):
+    def testProcessMappingAdjustException(self) -> None:
         """Check that if adjust raises exception, the exception is re-raised"""
 
         config = configparser.RawConfigParser()
@@ -338,7 +339,7 @@ class TestConvertConfig(unittest.TestCase):
 
         self.assertRaises(Exception, convert_config.process_mapping, COMPONENTS, config, template, mapping)
 
-    def testProcessVersions(self):
+    def testProcessVersions(self) -> None:
         """Sanity test for the config upgrade process through all versions"""
 
         config = convert_config.get_config([[]])
@@ -362,7 +363,7 @@ class TestConvertConfig(unittest.TestCase):
         # Check that subcomponent correctly inherits version from parent
         self.assertEqual(result.get("subcomp1", "version"), "3.0")
 
-    def testProcessVersionsTargetVersion(self):
+    def testProcessVersionsTargetVersion(self) -> None:
         """Check that the update stops at the target version, when it is set"""
 
         config = convert_config.get_config([[]])
@@ -370,7 +371,7 @@ class TestConvertConfig(unittest.TestCase):
         self.assertEqual(result.get("comp1", "version"), "2.0")
         self.assertEqual(result.get("comp2", "version"), "2.0")
 
-    def testStrToVersion(self):
+    def testStrToVersion(self) -> None:
         """Sanity test for the conversion of a version string to a tuple"""
 
         self.assertEqual(convert_config.str_to_version("12.34"), (12, 34))
@@ -378,7 +379,7 @@ class TestConvertConfig(unittest.TestCase):
         self.assertEqual(convert_config.str_to_version(' "12.34" '), (12, 34))
         self.assertEqual(convert_config.str_to_version('"   12.34"   '), (12, 34))
 
-    def testProcessVersionsUsingTOML(self):
+    def testProcessVersionsUsingTOML(self) -> None:
         """Test that using TOML files as old configs does not break"""
         toml = os.path.join(CONFIG_DIR, "comp1.toml")
         self.assertTrue(os.path.exists(toml))

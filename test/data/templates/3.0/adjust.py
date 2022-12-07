@@ -1,4 +1,4 @@
-def adjust(config, mapping):
+def adjust(config, mapping) -> None:
     """
     Set the test_adjust option
     """

@@ -1,6 +1,9 @@
+from typing import NoReturn
+
+
 # This adjust method raises exception.
 # The exception should be raised
-def adjust(config, mapping):
+def adjust(config, mapping) -> NoReturn:
     """
     Raise exception
     """
