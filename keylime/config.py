@@ -2,8 +2,9 @@ import ast
 import logging
 import os
 import os.path
+import re
 from configparser import RawConfigParser
-from typing import Any, Dict, List, Optional, cast
+from typing import Any, Dict, List, Optional, Tuple, Union, cast
 
 import yaml
 
@@ -51,6 +52,9 @@ MOUNT_SECURE = True
 
 DEFAULT_WORK_DIR = "/var/lib/keylime"
 WORK_DIR = os.getenv("KEYLIME_DIR", DEFAULT_WORK_DIR)
+
+# default templates directory
+TEMPLATES_DIR = "/usr/share/keylime/templates"
 
 # allow testing mode
 TEST_MODE = environ_bool("KEYLIME_TEST", False)
@@ -300,6 +304,94 @@ def yaml_to_dict(
         if logger is not None:
             logger.warning("Could not load yaml as dict: %s", str(err))
     return None
+
+
+def str_to_version(v_str: str) -> Union[Tuple[int, int], None]:
+    """
+    Validates the string format and converts the provided string to a tuple of
+    ints which can be sorted and compared.
+
+    :returns: Tuple with version number parts converted to int. In case of
+    invalid version string, returns None
+    """
+
+    # Strip to remove eventual quotes and spaces
+    v_str = v_str.strip('" ')
+
+    m = re.match(r"^(\d+)\.(\d+)$", v_str)
+
+    if not m:
+        return None
+
+    return tuple(int(x) for x in m.group(1, 2))
+
+
+def check_version(component: str, logger: Optional[logging.Logger] = None) -> bool:
+    """
+    Check component current configuration file version and return a boolean
+    indicating whether an upgrade is available
+    """
+
+    if not os.path.exists(TEMPLATES_DIR):
+        # If there are no templates available
+        return False
+
+    if not os.path.isdir(TEMPLATES_DIR):
+        if logger:
+            logger.warning("The path %s is not a directory", TEMPLATES_DIR)
+        return False
+
+    dirs = os.listdir(TEMPLATES_DIR)
+
+    if not dirs:
+        if logger:
+            logger.warning(
+                "The path %s does not contain version directories for config upgrade templates", TEMPLATES_DIR
+            )
+        return False
+
+    # Sort in reverse order to get first the latest version available
+    versions = sorted((x for x in set(map(str_to_version, dirs)) if x is not None), reverse=True)
+
+    if not versions:
+        if logger:
+            logger.warning("The path %s does not contain valid config version upgrade directories", TEMPLATES_DIR)
+        return False
+
+    config_version = get(component, "version")
+
+    if not config_version:
+        config_version = "1.0"
+
+    cur_version = str_to_version(config_version)
+
+    if not cur_version:
+        raise Exception(f"Invalid version in {component} configuration file")
+
+    for v in versions:
+        if cur_version < v:
+            if cur_version[0] < v[0]:
+                # In case an major update is available, print warning
+                if logger:
+                    logger.warning(
+                        "A major configuration upgrade is available (from %d.%d to %d.%d). Run 'keylime_upgrade_config' to upgrade the configuration",
+                        cur_version[0],
+                        cur_version[1],
+                        v[0],
+                        v[1],
+                    )
+                return True
+            if logger:
+                logger.info(
+                    "A minor configuration upgrade is available (from %d.%d to %d.%d). Run 'keylime_upgrade_config' to upgrade the configuration",
+                    cur_version[0],
+                    cur_version[1],
+                    v[0],
+                    v[1],
+                )
+            return True
+
+    return False
 
 
 IMA_ML = "/sys/kernel/security/ima/ascii_runtime_measurements"
