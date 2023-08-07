@@ -267,10 +267,9 @@ class ImaSig(Mode):
     @staticmethod
     def create_signature(hexstring: str) -> Optional[Signature]:
         """Create the Signature object if the hexstring is a valid signature"""
-        try:
+        if hexstring:
             return Signature(hexstring)
-        except ParserError:
-            pass
+
         return None
 
     def bytes(self) -> bytes:
@@ -390,6 +389,7 @@ class Entry:
                 failure.add_event("tomtou", "hash validation was skipped", True)
             return failure
         if self.ima_template_hash != self._ima_hash_alg.hash(self._bytes):
+            logger.warning("IMA template hash does not match the calculated hash.")
             failure.add_event(
                 "ima_hash",
                 {
@@ -401,6 +401,7 @@ class Entry:
             )
             return failure
         if self._validator is None:
+            logger.warning("No validator specified to verify IMA entry.")
             failure.add_event("no_validator", "No validator specified", True)
             return failure
 

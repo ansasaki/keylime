@@ -170,6 +170,7 @@ def _validate_ima_sig(
 
     # If we don't have a runtime_policy and don't have a keyring we just ignore the validation.
     if ima_keyrings is None:
+        logger.debug("no keyring to verify signature for file %s. Trying runtime_policy.", path.name)
         return failure
 
     logger.warning("signature verification for file %s failed and no runtime_policy is available", path.name)
@@ -191,6 +192,7 @@ def _validate_ima_buf(
     try:
         pubkey, keyidv2 = file_signatures.get_pubkey(data.data)
     except ValueError as ve:
+        logger.debug("key from %s does not have a supported key: %s", path.name, ve)
         failure.add_event("invalid_key", f"key from {path.name} does not have a supported key: {ve}", True)
         return failure
 
