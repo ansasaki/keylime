@@ -10,7 +10,7 @@ on:
 env:
   FEDORA_IMAGE: quay.io/fedora/fedora
   TAG: latest
-  IMAGE_BASE: quay.io/keylime
+  IMAGE_BASE: quay.io/ansasaki
 
 jobs:
   update-base-image:

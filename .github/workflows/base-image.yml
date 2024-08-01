@@ -11,7 +11,7 @@ on:
 
 env:
   REGISTRY: quay.io
-  IMAGE_BASE: quay.io/keylime
+  IMAGE_BASE: quay.io/ansasaki
 
 jobs:
   build-images:
