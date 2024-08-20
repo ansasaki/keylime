@@ -518,21 +518,28 @@ foobar.so(.*)?
         self.assertFalse(ok)
         self.assertEqual(len(hashes), 0)
 
-    def test_merge_base_policy(self):
+    def test_update_base_policy(self):
         # TODO: add now some actual good cases, to test the more
         # important flow.
         # XXX: Need to clarify whether "verification-keys" is correct
         # being a single string instead of an array of strings.
         test_cases = [
+            # Base policy is an invalid JSON
             {
                 "base-policy": "not-valid-json",
-                "policy": ima.empty_policy(),
                 "expected": None,
             },
+            # Base policy is a valid JSON with a field matching the current
+            # format, but with an invalid content according to current schema
+            {
+                "base-policy": '{"valid": "json", "verification-keys": "invalid"}',
+                "expected": None,
+            },
+            # Base policy is a valid JSON without any matching field against the
+            # current schema
             {
                 "base-policy": '{"valid": "json", "invalid": "policy"}',
-                "policy": ima.empty_policy(),
-                "expected": None,
+                "expected": ima.empty_policy(),
             },
         ]
 
@@ -542,9 +549,9 @@ foobar.so(.*)?
                 with open(base_policy, "w", encoding="UTF-8") as mfile:
                     mfile.write(c["base-policy"])
 
-                policy = create_runtime_policy.merge_base_policy(c["policy"], base_policy)
+                policy = create_runtime_policy.update_base_policy(base_policy)
                 self.assertEqual(policy, c["expected"])
 
         # Try non-existing file.
-        policy = create_runtime_policy.merge_base_policy(ima.empty_policy(), "/some/invalid/non/existing/policy/here")
+        policy = create_runtime_policy.update_base_policy("/some/invalid/non/existing/policy/here")
         self.assertEqual(policy, None)
