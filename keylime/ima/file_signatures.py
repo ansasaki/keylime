@@ -230,6 +230,29 @@ class ImaKeyring:
                 logger.error("Could not load a base64-decoded DER key: %s", str(ex))
         return ima_keyring
 
+    @staticmethod
+    def from_file_list(files: List[str]) -> Optional["ImaKeyring"]:
+        """Create an ImaKeyring object from a list of paths to files containing
+        public keys, private keys, or certificates"""
+
+        if not files:
+            return None
+
+        public_keys = list(map(get_pubkey_from_file, files))
+
+        keyring = ImaKeyring()
+        if not keyring:
+            return None
+
+        for key in public_keys:
+            if not key or not key[0]:
+                continue
+
+            # Add each retrieved public key to the keyring
+            keyring.add_pubkey(key[0], key[1])
+
+        return keyring
+
 
 class ImaKeyrings:
     """IMA Keyrings models the various keyrings of the system where IMA may take its keys from"""
