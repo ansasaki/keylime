@@ -8,7 +8,13 @@ from typing import Any, Dict, Optional, Sequence
 from sqlalchemy.orm import Session
 
 from keylime import config, keylime_logging
-from keylime.crypto import hash_token_for_log, hash_token_for_storage
+from keylime.crypto import (
+    compute_token_index,
+    generate_token_salt,
+    hash_token_for_log,
+    hash_token_for_storage,
+    verify_token_hash,
+)
 from keylime.db.keylime_db import SessionManager, make_engine
 from keylime.db.verifier_db import VerfierMain
 from keylime.models.base import *
@@ -38,7 +44,9 @@ def get_session() -> Session:
 class AuthSession(PersistableModel):
     # Explicit attribute declarations for type checkers
     session_id: str  # UUID, primary key for clean URLs
-    token_hash: str  # SHA-256 hash of token, indexed for authentication lookups
+    token_index: str  # SHA-256 hash of token for O(1) lookup (64 hex chars)
+    token_salt: str  # Per-token salt for PBKDF2 (32 hex chars)
+    token_hash: str  # PBKDF2 hash of token for verification (64 hex chars)
     token: str  # Plaintext token, virtual field (memory only, never persisted)
     active: bool
     agent_id: str
@@ -60,7 +68,11 @@ class AuthSession(PersistableModel):
         cls._persist_as("sessions")
         # session_id is a UUID for clean URLs (36 chars)
         cls._id("session_id", String(36))
-        # token_hash is SHA-256 hash of plaintext token for authentication lookups (64 hex chars)
+        # token_index is SHA-256 hash for O(1) database lookup (64 hex chars)
+        cls._field("token_index", String(64))
+        # token_salt is per-token random salt for PBKDF2 (32 hex chars = 16 bytes)
+        cls._field("token_salt", String(32))
+        # token_hash is PBKDF2(token, salt) for secure verification (64 hex chars)
         cls._field("token_hash", String(64))
         # Virtual field for plaintext token - only held in memory, never persisted
         cls._virtual("token", String(64))
@@ -86,7 +98,7 @@ class AuthSession(PersistableModel):
 
     @classmethod
     def _get_token_index(cls) -> Dict[str, str]:
-        """Get the token index: token_hash -> session_id."""
+        """Get the token index: token_index (SHA-256) -> session_id."""
         shared_memory = get_shared_memory()
         return shared_memory.get_or_create_dict("auth_sessions_token_index")
 
@@ -94,36 +106,36 @@ class AuthSession(PersistableModel):
     def cache_session(cls, session_data: Dict[str, Any]) -> None:
         """Store session data in shared memory cache with token index.
 
-        Primary storage is by session_id. A secondary index maps token_hash
-        to session_id for fast authentication lookups.
+        Primary storage is by session_id. A secondary index maps token_index
+        (SHA-256 hash) to session_id for fast authentication lookups.
         """
         session_id = session_data.get("session_id")
-        token_hash = session_data.get("token_hash")
+        token_idx = session_data.get("token_index")
 
         if session_id:
             sessions_cache = cls._get_sessions_cache()
             sessions_cache[session_id] = session_data
 
-            # Add token_hash -> session_id index entry
-            if token_hash:
-                token_index = cls._get_token_index()
-                token_index[token_hash] = session_id
+            # Add token_index -> session_id index entry
+            if token_idx:
+                token_index_cache = cls._get_token_index()
+                token_index_cache[token_idx] = session_id
 
     @classmethod
-    def uncache_session(cls, session_id: Optional[str] = None, token_hash: Optional[str] = None) -> None:
+    def uncache_session(cls, session_id: Optional[str] = None, token_index: Optional[str] = None) -> None:
         """Remove session from cache and token index."""
         sessions_cache = cls._get_sessions_cache()
-        token_index = cls._get_token_index()
+        token_index_cache = cls._get_token_index()
 
         if session_id and session_id in sessions_cache:
-            # Get token_hash from session data before deleting
+            # Get token_index from session data before deleting
             session_data = sessions_cache.get(session_id)
-            if session_data and not token_hash:
-                token_hash = session_data.get("token_hash")
+            if session_data and not token_index:
+                token_index = session_data.get("token_index")
             del sessions_cache[session_id]
 
-        if token_hash and token_hash in token_index:
-            del token_index[token_hash]
+        if token_index and token_index in token_index_cache:
+            del token_index_cache[token_index]
 
     @classmethod
     def _first(cls, **kwargs: Any) -> Optional["AuthSession"]:
@@ -147,44 +159,49 @@ class AuthSession(PersistableModel):
     def get_by_token(cls, token: str) -> Optional["AuthSession"]:
         """Look up an authentication session by token.
 
-        First checks the shared memory cache via token index (fast path),
-        then falls back to database lookup by indexed token_hash column.
+        Uses a tiered verification approach for performance:
+        1. Cache hit: Compare plaintext tokens directly (fast, cache is trusted memory)
+        2. Database lookup: PBKDF2 verification with per-token salt (slow, secure)
 
-        Uses constant-time comparison (hmac.compare_digest) to prevent
-        timing attacks when verifying the token_hash.
+        The cache stores plaintext tokens in process-local shared memory,
+        which is trusted. Database only stores hashed tokens for security.
 
         Args:
             token: The plaintext session token to look up
 
         Returns:
-            AuthSession if found, None otherwise
+            AuthSession if found and verified, None otherwise
         """
         if not token:
             return None
 
-        computed_token_hash = hash_token_for_storage(token)
+        # Compute SHA-256 index for lookup
+        computed_index = compute_token_index(token)
 
         # Fast path: check token index -> session cache
-        token_index = cls._get_token_index()
-        if computed_token_hash in token_index:
-            session_id = token_index[computed_token_hash]
+        token_index_cache = cls._get_token_index()
+        if computed_index in token_index_cache:
+            session_id = token_index_cache[computed_index]
             sessions_cache = cls._get_sessions_cache()
             if session_id in sessions_cache:
                 session_data = sessions_cache[session_id]
-                stored_hash = session_data.get("token_hash", "")
-                # Constant-time comparison to prevent timing attacks
-                if hmac.compare_digest(stored_hash, computed_token_hash):
-                    # Reconstruct AuthSession from cached data
+                # Fast verification: compare plaintext tokens directly
+                # Cache is trusted process-local memory, so this is safe
+                cached_token = session_data.get("token", "")
+                if cached_token and hmac.compare_digest(token, cached_token):
                     return cls._from_cache(session_data)
 
-        # Slow path: query database by token_hash (uses LIMIT 1)
-        auth_session = cls._first(token_hash=computed_token_hash)
+        # Slow path: query database by token_index (uses indexed lookup)
+        auth_session = cls._first(token_index=computed_index)
         if auth_session is None:
             return None
 
-        # Use constant-time comparison to prevent timing attacks
-        if not hmac.compare_digest(auth_session.token_hash, computed_token_hash):  # type: ignore[attr-defined]
+        # Verify with PBKDF2 using stored salt (required for DB lookups)
+        stored_salt = getattr(auth_session, "token_salt", "")
+        stored_hash = getattr(auth_session, "token_hash", "")
+        if not verify_token_hash(token, stored_salt, stored_hash):
             return None
+
         return auth_session
 
     @classmethod
@@ -192,6 +209,8 @@ class AuthSession(PersistableModel):
         """Reconstruct an AuthSession object from cached session data."""
         session = cls.empty()  # type: ignore[return-value]
         session.session_id = session_data["session_id"]  # type: ignore[attr-defined]
+        session.token_index = session_data.get("token_index", "")  # type: ignore[attr-defined]
+        session.token_salt = session_data.get("token_salt", "")  # type: ignore[attr-defined]
         session.token_hash = session_data.get("token_hash", "")  # type: ignore[attr-defined]
         session.token = session_data.get("token", "")  # type: ignore[attr-defined]
         session.agent_id = session_data["agent_id"]
@@ -290,10 +309,13 @@ class AuthSession(PersistableModel):
         This is used for the POST /sessions endpoint where we don't yet know
         if the agent is enrolled. Returns a dictionary with session data.
         """
-        # Generate UUID for session_id (clean URLs) and token with its hash
+        # Generate UUID for session_id (clean URLs) and token with secure hashing
         session_id = str(uuid.uuid4())
         token = secrets.token_urlsafe(32)
-        token_hash = hash_token_for_storage(token)
+        # Generate per-token salt and compute hashes (NIST SP 800-132 compliant)
+        token_salt = generate_token_salt()
+        token_index = compute_token_index(token)  # SHA-256 for O(1) lookup
+        token_hash = hash_token_for_storage(token, token_salt)  # PBKDF2 for verification
 
         # Extract auth capabilities from request
         data = request_data.get("data", {})
@@ -337,6 +359,8 @@ class AuthSession(PersistableModel):
         return {
             "session_id": session_id,
             "token": token,
+            "token_index": token_index,
+            "token_salt": token_salt,
             "token_hash": token_hash,
             "agent_id": agent_id,
             "nonce": nonce,
@@ -361,8 +385,10 @@ class AuthSession(PersistableModel):
         plaintext_token = session_data["token"]
         # Store the plaintext token in the virtual field (memory only)
         session.token = plaintext_token  # type: ignore[attr-defined]
-        # session_id is UUID, token_hash is hash of plaintext token
+        # session_id is UUID, token fields contain hashes for secure storage
         session.session_id = session_data["session_id"]  # type: ignore[attr-defined]
+        session.token_index = session_data["token_index"]  # type: ignore[attr-defined]
+        session.token_salt = session_data["token_salt"]  # type: ignore[attr-defined]
         session.token_hash = session_data["token_hash"]  # type: ignore[attr-defined]
         session.agent_id = session_data["agent_id"]
         session.nonce = session_data["nonce"]
@@ -397,10 +423,10 @@ class AuthSession(PersistableModel):
                 token_expires = session_data.get("token_expires_at")
 
                 if (nonce_expires and nonce_expires < now) or (token_expires and token_expires < now):
-                    stale_sessions.append((session_id, session_data.get("token_hash")))
+                    stale_sessions.append((session_id, session_data.get("token_index")))
 
-        for session_id, token_hash in stale_sessions:
-            cls.uncache_session(session_id=session_id, token_hash=token_hash)
+        for session_id, token_index in stale_sessions:
+            cls.uncache_session(session_id=session_id, token_index=token_index)
             logger.debug("Deleted stale session %s for agent '%s'", session_id, agent_id)
 
     @classmethod
@@ -453,10 +479,11 @@ class AuthSession(PersistableModel):
             if db_session.token_expires_at and db_session.token_expires_at > now:  # type: ignore[attr-defined]
                 # Reconstruct session data dictionary format expected by callers
                 session_id = db_session.session_id  # type: ignore[attr-defined]
-                token_hash = db_session.token_hash  # type: ignore[attr-defined]
                 session_data = {
                     "session_id": session_id,
-                    "token_hash": token_hash,
+                    "token_index": db_session.token_index,  # type: ignore[attr-defined]
+                    "token_salt": db_session.token_salt,  # type: ignore[attr-defined]
+                    "token_hash": db_session.token_hash,  # type: ignore[attr-defined]
                     "agent_id": db_session.agent_id,  # type: ignore[attr-defined]
                     "active": db_session.active,  # type: ignore[attr-defined]
                     "token_expires_at": db_session.token_expires_at,  # type: ignore[attr-defined]
@@ -491,7 +518,7 @@ class AuthSession(PersistableModel):
         deleted_count = 0
         for session_id, session_data in list(sessions_cache.items()):
             if session_data.get("agent_id") == agent_id and session_data.get("active"):
-                cls.uncache_session(session_id=session_id, token_hash=session_data.get("token_hash"))
+                cls.uncache_session(session_id=session_id, token_index=session_data.get("token_index"))
                 deleted_count += 1
                 logger.info("Deleted active session %s for agent '%s'", session_id, agent_id)
 
@@ -556,8 +583,10 @@ class AuthSession(PersistableModel):
             plaintext_token = secrets.token_urlsafe(32)
             # Store the plaintext token in the virtual field (memory only, not persisted)
             self.token = plaintext_token
-            # token_hash is the SHA-256 hash of the token for secure storage
-            self.token_hash = hash_token_for_storage(plaintext_token)
+            # Generate per-token salt and compute hashes (NIST SP 800-132 compliant)
+            self.token_salt = generate_token_salt()
+            self.token_index = compute_token_index(plaintext_token)  # SHA-256 for O(1) lookup
+            self.token_hash = hash_token_for_storage(plaintext_token, self.token_salt)  # PBKDF2
 
         if "active" not in self.values:
             self.active = False

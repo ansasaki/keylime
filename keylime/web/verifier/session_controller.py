@@ -156,7 +156,7 @@ class SessionController(Controller):
         if nonce_expires_at and nonce_expires_at < Timestamp.now():
             logger.warning("Nonce expired for session %s (agent %s)", session_id, agent_id)
             # Per spec: return 200 with evaluation:fail, not 401
-            AuthSession.uncache_session(session_id=session_id, token_hash=auth_session_data.get("token_hash"))
+            AuthSession.uncache_session(session_id=session_id, token_index=auth_session_data.get("token_index"))
 
             # Extract proof data from the request if provided
             data = params.get("data", {})
@@ -249,7 +249,7 @@ class SessionController(Controller):
             }
 
             # Delete from shared memory (cache + token index)
-            AuthSession.uncache_session(session_id=session_id, token_hash=auth_session_data.get("token_hash"))
+            AuthSession.uncache_session(session_id=session_id, token_index=auth_session_data.get("token_index"))
             self.send_response(code=200, body=response_data)
             return
 
@@ -310,7 +310,7 @@ class SessionController(Controller):
             }
 
             # Delete from shared memory on failure (cache + token index)
-            AuthSession.uncache_session(session_id=session_id, token_hash=auth_session_data.get("token_hash"))
+            AuthSession.uncache_session(session_id=session_id, token_index=auth_session_data.get("token_index"))
             self.send_response(code=401, body=response_data)
             return
 
@@ -338,7 +338,7 @@ class SessionController(Controller):
             )
         else:
             # Delete from shared memory after successful persistence (original behavior)
-            AuthSession.uncache_session(session_id=session_id, token_hash=auth_session.token_hash)
+            AuthSession.uncache_session(session_id=session_id, token_index=auth_session.token_index)
 
         # Build proper JSON-API response with required fields
         response_data = {

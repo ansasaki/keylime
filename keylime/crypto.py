@@ -224,29 +224,99 @@ def hash_token_for_log(token: str, length: int = 8) -> str:
     return hashlib.sha256(token.encode()).hexdigest()[:length]
 
 
-def hash_token_for_storage(token: str) -> str:
-    """Hash a token for secure storage in the database.
+# PBKDF2 parameters for token hashing (OWASP 2023+ / FIPS-140 compliant)
+# See: https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html
+_TOKEN_HASH_ITERATIONS = 600_000  # OWASP 2023 minimum for PBKDF2-HMAC-SHA256
+_TOKEN_SALT_LENGTH = 16  # 128 bits, minimum recommended by NIST
 
-    Uses SHA-256 to create a one-way hash of the token. This is appropriate for
-    high-entropy tokens (e.g., secrets.token_urlsafe(32) with ~192 bits of
-    entropy) where brute-force attacks are infeasible.
 
-    Security rationale:
-    - High-entropy tokens don't require slow hashing functions (bcrypt, argon2)
-      because brute-forcing 192+ bits is computationally infeasible
-    - SHA-256 provides collision resistance and one-way hashing
+def generate_token_salt() -> str:
+    """Generate a random salt for token hashing.
 
-    Args:
-        token: The authentication token to hash for storage
+    Generates a cryptographically secure random salt as recommended
+    by NIST SP 800-132.
 
     Returns:
-        Full SHA256 hex digest (64 characters) for database storage
+        Hex-encoded random salt (32 characters for 16 bytes)
+    """
+    return secrets.token_bytes(_TOKEN_SALT_LENGTH).hex()
+
+
+def compute_token_index(token: str) -> str:
+    """Compute SHA-256 hash of token for database indexing.
+
+    This provides a fast, deterministic hash for O(1) database lookups
+    without storing the plaintext token.
+
+    Args:
+        token: The authentication token
+
+    Returns:
+        Hex-encoded SHA-256 hash (64 characters)
 
     Raises:
-        ValueError: If token is empty or None
+        ValueError: If token is empty
     """
     if not token:
-        raise ValueError("Token cannot be empty for storage")
+        raise ValueError("Token cannot be empty")
     digest = hashes.Hash(hashes.SHA256(), backend=default_backend())
     digest.update(token.encode())
     return digest.finalize().hex()
+
+
+def hash_token_for_storage(token: str, salt: str) -> str:
+    """Hash a token for secure storage using PBKDF2 with HMAC-SHA-256.
+
+    Uses PBKDF2 with a per-token salt as recommended by NIST SP 800-132
+    and OWASP Password Storage Cheat Sheet. This provides:
+    - Protection against rainbow table attacks (unique salt per token)
+    - Computational cost for brute-force attempts (600k iterations per OWASP 2023)
+    - FIPS-140 compliant key derivation
+
+    Args:
+        token: The authentication token to hash
+        salt: Hex-encoded salt (from generate_token_salt())
+
+    Returns:
+        Hex-encoded PBKDF2 hash (64 characters for 32 bytes)
+
+    Raises:
+        ValueError: If token or salt is empty/invalid
+    """
+    if not token:
+        raise ValueError("Token cannot be empty for storage")
+    if not salt or len(salt) != _TOKEN_SALT_LENGTH * 2:
+        raise ValueError(f"Salt must be {_TOKEN_SALT_LENGTH * 2} hex characters")
+
+    kdf = PBKDF2HMAC(
+        algorithm=hashes.SHA256(),
+        length=32,
+        salt=bytes.fromhex(salt),
+        iterations=_TOKEN_HASH_ITERATIONS,
+        backend=default_backend(),
+    )
+    return kdf.derive(token.encode()).hex()
+
+
+def verify_token_hash(token: str, salt: str, stored_hash: str) -> bool:
+    """Verify a token against a stored PBKDF2 hash.
+
+    Uses constant-time comparison to prevent timing attacks.
+
+    Args:
+        token: The plaintext token to verify
+        salt: Hex-encoded salt used when the hash was created
+        stored_hash: The hex-encoded PBKDF2 hash from the database
+
+    Returns:
+        True if the token matches the stored hash, False otherwise
+    """
+    if not token or not salt or not stored_hash:
+        return False
+
+    try:
+        computed_hash = hash_token_for_storage(token, salt)
+        # Use constant-time comparison to prevent timing attacks
+        return hmac.compare_digest(computed_hash, stored_hash)
+    except Exception:
+        return False

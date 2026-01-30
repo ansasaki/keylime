@@ -179,19 +179,21 @@ class TestAuthSessionHelpers(unittest.TestCase):
     @patch("keylime.models.verifier.auth_session.AuthSession.all")
     def test_get_active_session_for_agent_from_database(self, mock_all, mock_cache_session):
         """Test that get_active_session_for_agent falls back to database."""
-        from keylime.crypto import hash_token_for_storage
+        from keylime.crypto import generate_token_salt, hash_token_for_storage
 
         now = Timestamp.now()
         future_time = now + timedelta(seconds=60)
 
-        # session_id is UUID, token_hash is hash of the token
+        # session_id is UUID, token_hash is PBKDF2 hash of the token with salt
         test_session_id = "550e8400-e29b-41d4-a716-446655440000"
-        test_token_hash = hash_token_for_storage("db-token-456")
+        test_token_salt = generate_token_salt()
+        test_token_hash = hash_token_for_storage("db-token-456", test_token_salt)
 
         # Mock database session with actual values (not MagicMock for simple types)
         mock_session = MagicMock()
         mock_session.session_id = test_session_id
         mock_session.token_hash = test_token_hash
+        mock_session.token_salt = test_token_salt
         mock_session.agent_id = self.test_agent_id
         mock_session.active = True
         mock_session.token_expires_at = future_time
@@ -400,8 +402,6 @@ class TestAuthSessionCore(unittest.TestCase):
     @patch.object(AuthSession, "get_by_token")
     def test_authenticate_agent_success(self, mock_get_by_token, mock_get_session):
         """Test successful agent authentication with valid token."""
-        from keylime.crypto import hash_token_for_storage
-
         # Create a mock agent
         mock_agent = MagicMock()
         mock_agent.agent_id = self.test_agent_id
@@ -413,7 +413,7 @@ class TestAuthSessionCore(unittest.TestCase):
 
         # Mock AuthSession.get_by_token to return an active session
         mock_auth_session = MagicMock()
-        mock_auth_session.session_id = hash_token_for_storage("test-token")
+        mock_auth_session.session_id = "550e8400-e29b-41d4-a716-446655440000"
         mock_auth_session.active = True
         mock_auth_session.agent_id = self.test_agent_id
         mock_auth_session.token_expires_at = Timestamp.now() + timedelta(hours=1)
@@ -490,20 +490,24 @@ class TestAuthSessionCore(unittest.TestCase):
     @patch.object(AuthSession, "empty")
     def test_create_from_memory(self, mock_empty):
         """Test AuthSession.create_from_memory()."""
-        from keylime.crypto import hash_token_for_storage
+        from keylime.crypto import compute_token_index, generate_token_salt, hash_token_for_storage
 
         # Mock agent
         mock_agent = MagicMock()
         mock_agent.agent_id = self.test_agent_id
 
-        # Create session data (session_id is UUID, token_hash is hash of token)
+        # Create session data (session_id is UUID, token_hash is PBKDF2 hash with salt)
         now = Timestamp.now()
         test_token = "test-token"
         test_session_id = "550e8400-e29b-41d4-a716-446655440000"
+        test_token_salt = generate_token_salt()
+        test_token_index = compute_token_index(test_token)
         session_data = {
             "session_id": test_session_id,
             "token": test_token,
-            "token_hash": hash_token_for_storage(test_token),
+            "token_index": test_token_index,
+            "token_salt": test_token_salt,
+            "token_hash": hash_token_for_storage(test_token, test_token_salt),
             "agent_id": self.test_agent_id,
             "nonce": b"test-nonce",
             "nonce_created_at": now,
@@ -524,6 +528,8 @@ class TestAuthSessionCore(unittest.TestCase):
         # Verify session attributes were set
         self.assertEqual(mock_session.token, test_token)
         self.assertEqual(mock_session.session_id, test_session_id)
+        self.assertEqual(mock_session.token_index, test_token_index)
+        self.assertEqual(mock_session.token_salt, test_token_salt)
         self.assertEqual(mock_session.token_hash, session_data["token_hash"])
         self.assertEqual(mock_session.agent_id, self.test_agent_id)
         self.assertEqual(mock_session.nonce, b"test-nonce")
