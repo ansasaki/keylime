@@ -50,8 +50,8 @@ class TestFromDbObjFieldList(unittest.TestCase):
         for column in VerfierMain.__table__.columns:
             db_columns.add(column.name)
 
-        # Read the source code of _from_db_obj from cloud_verifier_tornado.py
-        verifier_tornado_path = os.path.join(os.path.dirname(__file__), "..", "keylime", "cloud_verifier_tornado.py")
+        # Read the source code of _from_db_obj from verifier_db_manager.py
+        verifier_tornado_path = os.path.join(os.path.dirname(__file__), "..", "keylime", "verifier_db_manager.py")
 
         with open(verifier_tornado_path, encoding="utf-8") as f:
             source = f.read()
@@ -115,7 +115,7 @@ class TestFromDbObjFieldList(unittest.TestCase):
             self.fail(
                 f"Critical database fields missing from _from_db_obj() field list: {missing_fields}. "
                 f"These fields will not be restored after verifier restart, causing state loss. "
-                f"Add them to the fields list in cloud_verifier_tornado.py:_from_db_obj()"
+                f"Add them to the fields list in verifier_db_manager.py:_from_db_obj()"
             )
 
         # Specifically check for accept_attestations (the bug this test catches)
@@ -143,7 +143,7 @@ class TestSessionManagerSingleton(unittest.TestCase):
     def setUp(self):
         """Reset the module-level singleton state before each test."""
         # Import here to avoid circular dependencies
-        import keylime.cloud_verifier_tornado as cvt  # pylint: disable=import-outside-toplevel
+        import keylime.verifier_db_manager as cvt  # pylint: disable=import-outside-toplevel
 
         # Reset the initialization state
         # pylint: disable=protected-access
@@ -152,15 +152,15 @@ class TestSessionManagerSingleton(unittest.TestCase):
         cvt.engine = None
         # pylint: enable=protected-access
 
-    @patch("keylime.cloud_verifier_tornado.set_severity_config")
-    @patch("keylime.cloud_verifier_tornado.config")
-    @patch("keylime.cloud_verifier_tornado.make_engine")
-    @patch("keylime.cloud_verifier_tornado.record")
+    @patch("keylime.verifier_db_manager.set_severity_config")
+    @patch("keylime.verifier_db_manager.config")
+    @patch("keylime.verifier_db_manager.make_engine")
+    @patch("keylime.verifier_db_manager.record")
     def test_singleton_initialization_creates_session_manager(
         self, mock_record, mock_make_engine, mock_config, _mock_set_severity
     ):
         """Verify _initialize_verifier_config() creates singleton SessionManager."""
-        import keylime.cloud_verifier_tornado as cvt  # pylint: disable=import-outside-toplevel
+        import keylime.verifier_db_manager as cvt  # pylint: disable=import-outside-toplevel
 
         # Mock configuration
         mock_config.getlist.return_value = ["info", "error"]
@@ -183,15 +183,15 @@ class TestSessionManagerSingleton(unittest.TestCase):
         self.assertIsNotNone(cvt.engine)
         # pylint: enable=protected-access
 
-    @patch("keylime.cloud_verifier_tornado.set_severity_config")
-    @patch("keylime.cloud_verifier_tornado.config")
-    @patch("keylime.cloud_verifier_tornado.make_engine")
-    @patch("keylime.cloud_verifier_tornado.record")
+    @patch("keylime.verifier_db_manager.set_severity_config")
+    @patch("keylime.verifier_db_manager.config")
+    @patch("keylime.verifier_db_manager.make_engine")
+    @patch("keylime.verifier_db_manager.record")
     def test_singleton_initialization_is_idempotent(
         self, mock_record, mock_make_engine, mock_config, _mock_set_severity
     ):
         """Verify multiple calls to _initialize_verifier_config() don't create new instances."""
-        import keylime.cloud_verifier_tornado as cvt  # pylint: disable=import-outside-toplevel
+        import keylime.verifier_db_manager as cvt  # pylint: disable=import-outside-toplevel
 
         # Mock configuration
         mock_config.getlist.return_value = ["info", "error"]
@@ -216,15 +216,15 @@ class TestSessionManagerSingleton(unittest.TestCase):
         self.assertIs(first_manager, second_manager)
         self.assertIs(first_engine, second_engine)
 
-    @patch("keylime.cloud_verifier_tornado.set_severity_config")
-    @patch("keylime.cloud_verifier_tornado.config")
-    @patch("keylime.cloud_verifier_tornado.make_engine")
-    @patch("keylime.cloud_verifier_tornado.record")
+    @patch("keylime.verifier_db_manager.set_severity_config")
+    @patch("keylime.verifier_db_manager.config")
+    @patch("keylime.verifier_db_manager.make_engine")
+    @patch("keylime.verifier_db_manager.record")
     def test_singleton_initialization_thread_safety(
         self, mock_record, mock_make_engine, mock_config, _mock_set_severity
     ):
         """Verify concurrent initialization from multiple threads creates only one instance."""
-        import keylime.cloud_verifier_tornado as cvt  # pylint: disable=import-outside-toplevel
+        import keylime.verifier_db_manager as cvt  # pylint: disable=import-outside-toplevel
 
         # Mock configuration
         mock_config.getlist.return_value = ["info", "error"]
@@ -273,7 +273,7 @@ class TestSessionContextExecution(unittest.TestCase):
 
     def setUp(self):
         """Reset singleton state before each test."""
-        import keylime.cloud_verifier_tornado as cvt  # pylint: disable=import-outside-toplevel
+        import keylime.verifier_db_manager as cvt  # pylint: disable=import-outside-toplevel
 
         # pylint: disable=protected-access
         cvt._verifier_config_initialized = False
@@ -281,15 +281,15 @@ class TestSessionContextExecution(unittest.TestCase):
         cvt.engine = None
         # pylint: enable=protected-access
 
-    @patch("keylime.cloud_verifier_tornado.set_severity_config")
-    @patch("keylime.cloud_verifier_tornado.config")
-    @patch("keylime.cloud_verifier_tornado.make_engine")
-    @patch("keylime.cloud_verifier_tornado.record")
+    @patch("keylime.verifier_db_manager.set_severity_config")
+    @patch("keylime.verifier_db_manager.config")
+    @patch("keylime.verifier_db_manager.make_engine")
+    @patch("keylime.verifier_db_manager.record")
     def test_session_context_uses_singleton_session_manager(
         self, mock_record, mock_make_engine, mock_config, _mock_set_severity
     ):
         """Verify session_context() uses the singleton _session_manager."""
-        import keylime.cloud_verifier_tornado as cvt  # pylint: disable=import-outside-toplevel
+        import keylime.verifier_db_manager as cvt  # pylint: disable=import-outside-toplevel
 
         # Mock configuration
         mock_config.getlist.return_value = ["info", "error"]
@@ -300,7 +300,7 @@ class TestSessionContextExecution(unittest.TestCase):
 
         # Mock SessionManager's session_context to avoid actual database operations
         mock_session = MagicMock()
-        with patch("keylime.cloud_verifier_tornado.SessionManager") as MockSessionManager:
+        with patch("keylime.verifier_db_manager.SessionManager") as MockSessionManager:
             mock_sm_instance = MagicMock()
             MockSessionManager.return_value = mock_sm_instance
             mock_sm_instance.session_context.return_value.__enter__.return_value = mock_session
@@ -319,15 +319,15 @@ class TestSessionContextExecution(unittest.TestCase):
             # Verify SessionManager instance was created once
             MockSessionManager.assert_called_once()
 
-    @patch("keylime.cloud_verifier_tornado.set_severity_config")
-    @patch("keylime.cloud_verifier_tornado.config")
-    @patch("keylime.cloud_verifier_tornado.make_engine")
-    @patch("keylime.cloud_verifier_tornado.record")
+    @patch("keylime.verifier_db_manager.set_severity_config")
+    @patch("keylime.verifier_db_manager.config")
+    @patch("keylime.verifier_db_manager.make_engine")
+    @patch("keylime.verifier_db_manager.record")
     def test_session_context_reuses_singleton_on_multiple_calls(
         self, mock_record, mock_make_engine, mock_config, _mock_set_severity
     ):
         """Verify multiple session_context() calls reuse the same singleton SessionManager."""
-        import keylime.cloud_verifier_tornado as cvt  # pylint: disable=import-outside-toplevel
+        import keylime.verifier_db_manager as cvt  # pylint: disable=import-outside-toplevel
 
         # Mock configuration
         mock_config.getlist.return_value = ["info", "error"]
@@ -338,7 +338,7 @@ class TestSessionContextExecution(unittest.TestCase):
 
         # Mock SessionManager
         mock_session = MagicMock()
-        with patch("keylime.cloud_verifier_tornado.SessionManager") as MockSessionManager:
+        with patch("keylime.verifier_db_manager.SessionManager") as MockSessionManager:
             mock_sm_instance = MagicMock()
             MockSessionManager.return_value = mock_sm_instance
             mock_sm_instance.session_context.return_value.__enter__.return_value = mock_session
@@ -374,14 +374,12 @@ class TestStoreAttestationStateExecution(unittest.TestCase):
     it uses session.get() instead of deprecated query().get().
     """
 
-    @patch("keylime.cloud_verifier_tornado.session_context")
-    @patch("keylime.cloud_verifier_tornado.logger")
+    @patch("keylime.verifier_db_manager.session_context")
+    @patch("keylime.verifier_db_manager.logger")
     def test_store_attestation_state_executes_with_session_get(self, _mock_logger, mock_session_context):
         """Verify store_attestation_state() executes and uses session.get()."""
-        from keylime.cloud_verifier_tornado import (  # pylint: disable=import-outside-toplevel
-            AgentAttestState,
-            store_attestation_state,
-        )
+        from keylime.agentstates import AgentAttestState  # pylint: disable=import-outside-toplevel
+        from keylime.verifier_db_manager import store_attestation_state  # pylint: disable=import-outside-toplevel
 
         # Create mock session
         mock_session = MagicMock()
@@ -420,16 +418,14 @@ class TestStoreAttestationStateExecution(unittest.TestCase):
         # Verify session.add was called
         mock_session.add.assert_called_once_with(mock_agent)
 
-    @patch("keylime.cloud_verifier_tornado.session_context")
-    @patch("keylime.cloud_verifier_tornado.logger")
+    @patch("keylime.verifier_db_manager.session_context")
+    @patch("keylime.verifier_db_manager.logger")
     def test_store_attestation_state_handles_exception(self, mock_logger, mock_session_context):
         """Verify store_attestation_state() handles SQLAlchemy exceptions."""
         from sqlalchemy.exc import SQLAlchemyError  # pylint: disable=import-outside-toplevel
 
-        from keylime.cloud_verifier_tornado import (  # pylint: disable=import-outside-toplevel
-            AgentAttestState,
-            store_attestation_state,
-        )
+        from keylime.agentstates import AgentAttestState  # pylint: disable=import-outside-toplevel
+        from keylime.verifier_db_manager import store_attestation_state  # pylint: disable=import-outside-toplevel
 
         # Create mock session that raises exception
         mock_session = MagicMock()
@@ -460,7 +456,7 @@ class TestInitializeVerifierConfigExecution(unittest.TestCase):
 
     def setUp(self):
         """Reset singleton state before each test."""
-        import keylime.cloud_verifier_tornado as cvt  # pylint: disable=import-outside-toplevel
+        import keylime.verifier_db_manager as cvt  # pylint: disable=import-outside-toplevel
 
         # pylint: disable=protected-access
         cvt._verifier_config_initialized = False
@@ -468,13 +464,13 @@ class TestInitializeVerifierConfigExecution(unittest.TestCase):
         cvt.engine = None
         # pylint: enable=protected-access
 
-    @patch("keylime.cloud_verifier_tornado.record")
-    @patch("keylime.cloud_verifier_tornado.make_engine")
-    @patch("keylime.cloud_verifier_tornado.config")
-    @patch("keylime.cloud_verifier_tornado.set_severity_config")
+    @patch("keylime.verifier_db_manager.record")
+    @patch("keylime.verifier_db_manager.make_engine")
+    @patch("keylime.verifier_db_manager.config")
+    @patch("keylime.verifier_db_manager.set_severity_config")
     def test_initialize_verifier_config_fast_path(self, _mock_set_severity, mock_config, mock_make_engine, mock_record):
         """Verify fast path when already initialized (no lock acquisition)."""
-        import keylime.cloud_verifier_tornado as cvt  # pylint: disable=import-outside-toplevel
+        import keylime.verifier_db_manager as cvt  # pylint: disable=import-outside-toplevel
 
         # Mock configuration
         mock_config.getlist.return_value = ["info", "error"]
@@ -497,15 +493,15 @@ class TestInitializeVerifierConfigExecution(unittest.TestCase):
         self.assertEqual(first_call_count, 1)
         self.assertEqual(second_call_count, 1)  # No additional call
 
-    @patch("keylime.cloud_verifier_tornado.record")
-    @patch("keylime.cloud_verifier_tornado.make_engine")
-    @patch("keylime.cloud_verifier_tornado.config")
-    @patch("keylime.cloud_verifier_tornado.set_severity_config")
+    @patch("keylime.verifier_db_manager.record")
+    @patch("keylime.verifier_db_manager.make_engine")
+    @patch("keylime.verifier_db_manager.config")
+    @patch("keylime.verifier_db_manager.set_severity_config")
     def test_initialize_verifier_config_with_record_manager(
         self, _mock_set_severity, mock_config, mock_make_engine, mock_record
     ):
         """Verify initialization with record manager configured."""
-        import keylime.cloud_verifier_tornado as cvt  # pylint: disable=import-outside-toplevel
+        import keylime.verifier_db_manager as cvt  # pylint: disable=import-outside-toplevel
 
         # Mock configuration with record manager
         mock_config.getlist.return_value = ["info", "error"]
@@ -544,55 +540,53 @@ class TestSQLAlchemy20APIUsage(unittest.TestCase):
     """
 
     def test_no_deprecated_query_get_usage(self):
-        """Verify cloud_verifier_tornado.py doesn't use deprecated session.query().get()."""
-        # Read the source code
-        verifier_tornado_path = os.path.join(os.path.dirname(__file__), "..", "keylime", "cloud_verifier_tornado.py")
-
-        with open(verifier_tornado_path, encoding="utf-8") as f:
-            source = f.read()
-
-        # Look for the deprecated pattern: session.query(...).get(
-        # This pattern is deprecated in SQLAlchemy 2.0 and causes errors
+        """Verify verifier modules don't use deprecated session.query().get()."""
         deprecated_pattern = r"session\.query\([^)]+\)\.get\("
 
-        matches = re.findall(deprecated_pattern, source)
+        for filename in ("verifier_db_manager.py", "cloud_verifier_tornado.py"):
+            filepath = os.path.join(os.path.dirname(__file__), "..", "keylime", filename)
 
-        if matches:
-            self.fail(
-                f"Found deprecated session.query().get() usage in cloud_verifier_tornado.py. "
-                f"This causes errors with SQLAlchemy 2.0.39+. "
-                f"Use session.get(Model, id) instead. "
-                f"Matches found: {matches}"
-            )
+            with open(filepath, encoding="utf-8") as f:
+                source = f.read()
+
+            matches = re.findall(deprecated_pattern, source)
+
+            if matches:
+                self.fail(
+                    f"Found deprecated session.query().get() usage in {filename}. "
+                    f"This causes errors with SQLAlchemy 2.0.39+. "
+                    f"Use session.get(Model, id) instead. "
+                    f"Matches found: {matches}"
+                )
 
     def test_uses_sqlalchemy_20_session_get(self):
-        """Verify cloud_verifier_tornado.py uses SQLAlchemy 2.0 session.get() API."""
-        # Read the source code
-        verifier_tornado_path = os.path.join(os.path.dirname(__file__), "..", "keylime", "cloud_verifier_tornado.py")
-
-        with open(verifier_tornado_path, encoding="utf-8") as f:
-            source = f.read()
-
-        # Look for the SQLAlchemy 2.0 pattern: session.get(Model, id)
-        # This should appear in store_attestation_state() and AgentsHandler.delete()
+        """Verify verifier modules use SQLAlchemy 2.0 session.get() API."""
         modern_pattern = r"session\.get\(VerfierMain,"
+        total_matches = 0
 
-        matches = re.findall(modern_pattern, source)
+        for filename in ("verifier_db_manager.py", "cloud_verifier_tornado.py"):
+            filepath = os.path.join(os.path.dirname(__file__), "..", "keylime", filename)
 
-        # We expect at least 2 occurrences (store_attestation_state and AgentsHandler.delete)
+            with open(filepath, encoding="utf-8") as f:
+                source = f.read()
+
+            matches = re.findall(modern_pattern, source)
+            total_matches += len(matches)
+
+        # We expect at least 2 occurrences across both files
         self.assertGreaterEqual(
-            len(matches),
+            total_matches,
             2,
-            f"Expected at least 2 uses of session.get(VerfierMain, ...) in cloud_verifier_tornado.py, "
-            f"found {len(matches)}. The SQLAlchemy 2.0 API should be used instead of deprecated Query.get().",
+            f"Expected at least 2 uses of session.get(VerfierMain, ...) across verifier modules, "
+            f"found {total_matches}. The SQLAlchemy 2.0 API should be used instead of deprecated Query.get().",
         )
 
     def test_store_attestation_state_uses_session_get(self):
         """Verify store_attestation_state() uses session.get() not query().get()."""
-        # Read the source code
-        verifier_tornado_path = os.path.join(os.path.dirname(__file__), "..", "keylime", "cloud_verifier_tornado.py")
+        # Read the source code from verifier_db_manager.py where store_attestation_state now lives
+        db_manager_path = os.path.join(os.path.dirname(__file__), "..", "keylime", "verifier_db_manager.py")
 
-        with open(verifier_tornado_path, encoding="utf-8") as f:
+        with open(db_manager_path, encoding="utf-8") as f:
             source = f.read()
 
         # Find the store_attestation_state function
@@ -665,7 +659,7 @@ class TestSessionContextEdgeCases(unittest.TestCase):
 
     def setUp(self):
         """Reset singleton state before each test."""
-        import keylime.cloud_verifier_tornado as cvt  # pylint: disable=import-outside-toplevel
+        import keylime.verifier_db_manager as cvt  # pylint: disable=import-outside-toplevel
 
         # pylint: disable=protected-access
         cvt._verifier_config_initialized = False
@@ -673,16 +667,16 @@ class TestSessionContextEdgeCases(unittest.TestCase):
         cvt.engine = None
         # pylint: enable=protected-access
 
-    @patch("keylime.cloud_verifier_tornado.set_severity_config")
-    @patch("keylime.cloud_verifier_tornado.config")
-    @patch("keylime.cloud_verifier_tornado.make_engine")
-    @patch("keylime.cloud_verifier_tornado.record")
-    @patch("keylime.cloud_verifier_tornado.SessionManager")
+    @patch("keylime.verifier_db_manager.set_severity_config")
+    @patch("keylime.verifier_db_manager.config")
+    @patch("keylime.verifier_db_manager.make_engine")
+    @patch("keylime.verifier_db_manager.record")
+    @patch("keylime.verifier_db_manager.SessionManager")
     def test_session_context_assertion_on_uninitialized(
         self, MockSessionManager, mock_record, mock_make_engine, mock_config, _mock_set_severity
     ):
         """Verify session_context() asserts when session_manager is None (edge case)."""
-        import keylime.cloud_verifier_tornado as cvt  # pylint: disable=import-outside-toplevel
+        import keylime.verifier_db_manager as cvt  # pylint: disable=import-outside-toplevel
 
         # Mock configuration
         mock_config.getlist.return_value = ["info", "error"]
@@ -710,7 +704,7 @@ class TestInitializeVerifierConfigErrorPaths(unittest.TestCase):
 
     def setUp(self):
         """Reset singleton state before each test."""
-        import keylime.cloud_verifier_tornado as cvt  # pylint: disable=import-outside-toplevel
+        import keylime.verifier_db_manager as cvt  # pylint: disable=import-outside-toplevel
 
         # pylint: disable=protected-access
         cvt._verifier_config_initialized = False
@@ -718,17 +712,17 @@ class TestInitializeVerifierConfigErrorPaths(unittest.TestCase):
         cvt.engine = None
         # pylint: enable=protected-access
 
-    @patch("keylime.cloud_verifier_tornado.set_severity_config")
-    @patch("keylime.cloud_verifier_tornado.config")
-    @patch("keylime.cloud_verifier_tornado.make_engine")
-    @patch("keylime.cloud_verifier_tornado.sys")
+    @patch("keylime.verifier_db_manager.set_severity_config")
+    @patch("keylime.verifier_db_manager.config")
+    @patch("keylime.verifier_db_manager.make_engine")
+    @patch("keylime.verifier_db_manager.sys")
     def test_initialize_verifier_config_sqlalchemy_error(
         self, mock_sys, mock_make_engine, mock_config, _mock_set_severity
     ):
         """Verify _initialize_verifier_config() handles SQLAlchemy errors."""
         from sqlalchemy.exc import SQLAlchemyError  # pylint: disable=import-outside-toplevel
 
-        import keylime.cloud_verifier_tornado as cvt  # pylint: disable=import-outside-toplevel
+        import keylime.verifier_db_manager as cvt  # pylint: disable=import-outside-toplevel
 
         # Mock configuration
         mock_config.getlist.return_value = ["info", "error"]
@@ -746,16 +740,16 @@ class TestInitializeVerifierConfigErrorPaths(unittest.TestCase):
         # Verify sys.exit(1) was called
         mock_sys.exit.assert_called_once_with(1)
 
-    @patch("keylime.cloud_verifier_tornado.set_severity_config")
-    @patch("keylime.cloud_verifier_tornado.config")
-    @patch("keylime.cloud_verifier_tornado.make_engine")
-    @patch("keylime.cloud_verifier_tornado.record")
-    @patch("keylime.cloud_verifier_tornado.sys")
+    @patch("keylime.verifier_db_manager.set_severity_config")
+    @patch("keylime.verifier_db_manager.config")
+    @patch("keylime.verifier_db_manager.make_engine")
+    @patch("keylime.verifier_db_manager.record")
+    @patch("keylime.verifier_db_manager.sys")
     def test_initialize_verifier_config_record_management_error(
         self, mock_sys, mock_record, mock_make_engine, mock_config, _mock_set_severity
     ):
         """Verify _initialize_verifier_config() handles record management errors."""
-        import keylime.cloud_verifier_tornado as cvt  # pylint: disable=import-outside-toplevel
+        import keylime.verifier_db_manager as cvt  # pylint: disable=import-outside-toplevel
 
         # Mock configuration
         mock_config.getlist.return_value = ["info", "error"]

@@ -397,9 +397,9 @@ class TestVerifierServerEngineDisposal(unittest.TestCase):
         )
 
         self.assertIn(
-            "cloud_verifier_tornado.reset_verifier_config()",
+            "reset_verifier_config()",
             method_body,
-            "_post_fork should call cloud_verifier_tornado.reset_verifier_config()",
+            "_post_fork should call reset_verifier_config()",
         )
 
     def test_base_server_calls_post_fork_before_start_single(self):
