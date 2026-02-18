@@ -42,11 +42,15 @@ class TestAgentControllerIndex(unittest.TestCase):
         mock_session = MagicMock()
         mock_session_ctx.return_value.__enter__ = MagicMock(return_value=mock_session)
         mock_session_ctx.return_value.__exit__ = MagicMock(return_value=False)
-        mock_session.query.return_value.all.return_value = [("uuid1",), ("uuid2",)]
+        mock_row1 = MagicMock()
+        mock_row1.agent_id = "uuid1"
+        mock_row2 = MagicMock()
+        mock_row2.agent_id = "uuid2"
+        mock_session.query.return_value.all.return_value = [mock_row1, mock_row2]
 
         controller.index()
 
-        controller.respond.assert_called_once_with(200, "Success", {"uuids": [("uuid1",), ("uuid2",)]})
+        controller.respond.assert_called_once_with(200, "Success", {"uuids": ["uuid1", "uuid2"]})
 
     @patch(f"{MODULE}.cloud_verifier_common")
     @patch(f"{MODULE}.session_context")

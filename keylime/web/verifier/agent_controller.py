@@ -63,12 +63,11 @@ class AgentController(Controller):
                 verifier = self.query_params.get("verifier")
 
                 if verifier and verifier != "":
-                    json_response_list = (
-                        session.query(VerfierMain.agent_id).filter_by(verifier_id=cast(str, verifier)).all()
-                    )
+                    rows = session.query(VerfierMain.agent_id).filter_by(verifier_id=cast(str, verifier)).all()
                 else:
-                    json_response_list = session.query(VerfierMain.agent_id).all()
+                    rows = session.query(VerfierMain.agent_id).all()
 
+                json_response_list = [row.agent_id for row in rows]  # type: ignore[attr-defined]
                 self.respond(200, "Success", {"uuids": json_response_list})
 
             logger.info("GET returning 200 response for agent_id list")
