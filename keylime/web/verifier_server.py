@@ -12,6 +12,7 @@ from keylime.common import states
 from keylime.db.keylime_db import SessionManager, make_engine
 from keylime.db.verifier_db import VerfierMain
 from keylime.models.verifier.auth_session import AuthSession
+from keylime.verifier_db_manager import reset_verifier_config
 from keylime.web.base.server import Server
 from keylime.web.verifier.agent_controller import AgentController
 from keylime.web.verifier.attestation_controller import AttestationController
@@ -66,7 +67,7 @@ class VerifierServer(Server):
         # CRITICAL: Reset any database state inherited from parent process.
         # The parent initializes globals when querying agents (line 39), so children
         # inherit initialized state. We must reset to trigger lazy re-initialization.
-        cloud_verifier_tornado.reset_verifier_config()
+        reset_verifier_config()
 
         # Distribute agents to this worker using round-robin (task_id is the worker index)
         if self.operating_mode == "pull" and all_agents:

@@ -78,7 +78,7 @@ def _mark_agent_failed(agent_id: str, expected_handle: object) -> None:
 
         # Import here to avoid circular dependency issues
         # pylint: disable=import-outside-toplevel
-        from keylime.cloud_verifier_tornado import session_context
+        from keylime.verifier_db_manager import session_context
 
         # Update database to mark agent as failed using singleton session context
         with session_context() as session:
@@ -191,7 +191,7 @@ def check_push_agent_timeouts() -> None:
 
         # Import here to avoid circular dependency issues
         # pylint: disable=import-outside-toplevel
-        from keylime.cloud_verifier_tornado import session_context
+        from keylime.verifier_db_manager import session_context
 
         # Use singleton session context to avoid engine leaks
         with session_context() as session:
