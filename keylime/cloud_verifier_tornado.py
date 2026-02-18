@@ -14,8 +14,9 @@ import tornado.ioloop
 import tornado.netutil
 import tornado.process
 import tornado.web
+from sqlalchemy.engine import Engine
 from sqlalchemy.exc import SQLAlchemyError
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.orm import joinedload
 from sqlalchemy.orm.exc import NoResultFound  # pyright: ignore
 
 from keylime import api_version as keylime_api_version
@@ -24,17 +25,16 @@ from keylime import (
     config,
     json,
     keylime_logging,
-    push_agent_monitor,
     revocation_notifier,
     signing,
     tornado_requests,
+    verifier_db_manager,
     web_util,
 )
-from keylime.agentstates import AgentAttestState, AgentAttestStates
 from keylime.common import retry, states, validators
 from keylime.common.version import str_to_version
 from keylime.config import DEFAULT_TIMEOUT
-from keylime.db.verifier_db import VerfierMain, VerifierAllowlist, VerifierAttestations, VerifierMbpolicy
+from keylime.db.verifier_db import VerfierMain, VerifierAllowlist, VerifierMbpolicy
 from keylime.failure import MAX_SEVERITY_LABEL, Component, Event, Failure
 from keylime.ima import ima
 from keylime.mba import mba
@@ -42,9 +42,9 @@ from keylime.shared_data import clear_agent_policy_cache
 from keylime.tee import snp
 from keylime.verifier_db_manager import (
     _from_db_obj,
+    _initialize_verifier_config,
     exclude_db,
     get_AgentAttestStates,
-    reset_verifier_config,
     session_context,
     store_attestation_state,
     verifier_db_delete_agent,
@@ -1868,8 +1868,8 @@ async def invoke_get_quote(
                 agent["provide_V"] = True
             agentAttestState = get_AgentAttestStates().get_by_agent_id(agent["agent_id"])
 
-            if rmc:
-                rmc.record_create(agent, json_response, mb_policy, runtime_policy)
+            if verifier_db_manager.rmc:
+                verifier_db_manager.rmc.record_create(agent, json_response, mb_policy, runtime_policy)
 
             failure = cloud_verifier_common.process_quote_response(
                 agent,
@@ -2360,7 +2360,7 @@ def main() -> None:
     # set a conservative general umask
     os.umask(0o077)
 
-    VerfierMain.metadata.create_all(engine, checkfirst=True)  # pyright: ignore
+    VerfierMain.metadata.create_all(verifier_db_manager.engine, checkfirst=True)  # pyright: ignore
     with session_context() as session:
         try:
             query_all = session.query(VerfierMain).all()
@@ -2400,8 +2400,8 @@ def main() -> None:
 
     def server_process(task_id: int, agents: List[VerfierMain]) -> None:
         logger.info("Starting server of process %s", task_id)
-        assert isinstance(engine, Engine)
-        engine.dispose()
+        assert isinstance(verifier_db_manager.engine, Engine)
+        verifier_db_manager.engine.dispose()
         server = tornado.httpserver.HTTPServer(app, ssl_options=ssl_ctx, max_buffer_size=max_upload_size)
         server.add_sockets(sockets)
 
