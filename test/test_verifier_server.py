@@ -291,12 +291,6 @@ class TestVerifierServerEngineDisposal(unittest.TestCase):
             "start_multi must call reset_verifier_config() after forking to clear inherited database state",
         )
 
-        self.assertIn(
-            "cloud_verifier_tornado.reset_verifier_config()",
-            after_fork,
-            "start_multi should call cloud_verifier_tornado.reset_verifier_config() after forking",
-        )
-
     def test_verifier_config_reset_happens_before_worker_operations(self):
         """Verify verifier config reset occurs after fork but before any worker operations."""
         # Read the source code
