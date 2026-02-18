@@ -8,6 +8,7 @@ import unittest
 from typing import Any, cast
 from unittest.mock import MagicMock, patch
 
+from keylime.web.base.action_handler import StopAction
 from keylime.web.verifier.evidence_controller import EvidenceController
 
 MODULE = "keylime.web.verifier.evidence_controller"
@@ -223,14 +224,126 @@ class TestEvidenceControllerTEEVerify(unittest.TestCase):
 class TestEvidenceControllerVersioning(unittest.TestCase):
     """Test cases for version handling."""
 
-    def test_process_v3_returns_404(self):
-        """Test that v3+ process returns 404 (not yet implemented)."""
+    @patch(f"{MODULE}.cloud_verifier_common")
+    @patch(f"{MODULE}.ima")
+    def test_process_v3_tpm_valid_returns_resource(self, mock_ima, mock_cvc):
+        """Test that v3 TPM verification success returns JSON:API resource."""
         controller = _v3_controller()
-        controller.respond = MagicMock()
+        controller._api_request_body = MagicMock()  # Satisfy @require_json_api
+        controller.send_response = MagicMock()
 
-        controller.process()
+        mock_failure = MagicMock()
+        mock_failure.__bool__ = MagicMock(return_value=False)
+        mock_failure.events = []
+        mock_cvc.process_verify_attestation.return_value = mock_failure
+        mock_ima.deserialize_runtime_policy.return_value = None
 
-        controller.respond.assert_called_once_with(404)
+        evidence_data = {
+            "evidence_type": "tpm",
+            "data": {
+                "quote": "q",
+                "nonce": "n",
+                "hash_alg": "sha256",
+                "tpm_ek": "ek",
+                "tpm_ak": "ak",
+                "tpm_policy": "policy",
+            },
+        }
+
+        with self.assertRaises(StopAction):
+            controller.process(evidence=evidence_data)
+
+        controller.send_response.assert_called_once()
+        args = controller.send_response.call_args[0]
+        self.assertEqual(args[0], 200)
+        body = args[2]
+        self.assertIn("data", body)
+        self.assertEqual(body["data"]["type"], "evidence_result")
+        self.assertTrue(body["data"]["attributes"]["valid"])
+
+    @patch(f"{MODULE}.cloud_verifier_common")
+    @patch(f"{MODULE}.ima")
+    def test_process_v3_tpm_failure_returns_resource_with_failures(self, mock_ima, mock_cvc):
+        """Test that v3 TPM verification failure returns resource with failures list."""
+        controller = _v3_controller()
+        controller._api_request_body = MagicMock()
+        controller.send_response = MagicMock()
+
+        mock_event = MagicMock()
+        mock_event.event_id = "tpm.quote_mismatch"
+        mock_event.context = '{"message": "quote mismatch"}'
+        mock_failure = MagicMock()
+        mock_failure.__bool__ = MagicMock(return_value=True)
+        mock_failure.events = [mock_event]
+        mock_cvc.process_verify_attestation.return_value = mock_failure
+        mock_ima.deserialize_runtime_policy.return_value = None
+
+        evidence_data = {
+            "evidence_type": "tpm",
+            "data": {
+                "quote": "q",
+                "nonce": "n",
+                "hash_alg": "sha256",
+                "tpm_ek": "ek",
+                "tpm_ak": "ak",
+                "tpm_policy": "policy",
+            },
+        }
+
+        with self.assertRaises(StopAction):
+            controller.process(evidence=evidence_data)
+
+        controller.send_response.assert_called_once()
+        args = controller.send_response.call_args[0]
+        self.assertEqual(args[0], 200)
+        body = args[2]
+        self.assertIn("data", body)
+        self.assertFalse(body["data"]["attributes"]["valid"])
+        self.assertEqual(len(body["data"]["attributes"]["failures"]), 1)
+
+    def test_process_v3_missing_type_returns_error(self):
+        """Test that v3 process returns error when evidence_type missing."""
+        controller = _v3_controller()
+        controller._api_request_body = MagicMock()
+        controller.send_response = MagicMock()
+
+        with self.assertRaises(StopAction):
+            controller.process(evidence={"data": {"quote": "q"}})
+
+        controller.send_response.assert_called_once()
+        args = controller.send_response.call_args[0]
+        self.assertEqual(args[0], 422)
+
+    def test_process_v3_invalid_evidence_type_returns_error(self):
+        """Test that v3 process returns error for invalid evidence type."""
+        controller = _v3_controller()
+        controller._api_request_body = MagicMock()
+        controller.send_response = MagicMock()
+
+        with self.assertRaises(StopAction):
+            controller.process(
+                evidence={
+                    "evidence_type": "invalid",
+                    "data": {"foo": "bar"},
+                }
+            )
+
+        controller.send_response.assert_called_once()
+        args = controller.send_response.call_args[0]
+        self.assertEqual(args[0], 422)
+
+    def test_process_v3_missing_data_returns_error(self):
+        """Test that v3 process returns error when no evidence data provided."""
+        controller = _v3_controller()
+        controller._api_request_body = MagicMock()
+        controller.send_response = MagicMock()
+
+        with self.assertRaises(StopAction):
+            controller.process()
+
+        controller.send_response.assert_called_once()
+        args = controller.send_response.call_args[0]
+        self.assertEqual(args[0], 400)
 
 
 if __name__ == "__main__":

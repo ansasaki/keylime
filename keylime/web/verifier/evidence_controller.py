@@ -15,7 +15,8 @@ from keylime import cloud_verifier_common, json, keylime_logging, web_util
 from keylime.failure import Component, Failure
 from keylime.ima import ima
 from keylime.tee import snp
-from keylime.web.base import Controller
+from keylime.web.base import APIError, APILink, APIResource, Controller
+from keylime.web.base.exceptions import StopAction
 
 logger = keylime_logging.init_logging("verifier")
 
@@ -44,6 +45,7 @@ class EvidenceController(Controller):
     All actions in this controller are PUBLIC (no authentication required).
     """
 
+    # POST /v3[.x]/verify/evidence
     # POST /v2[.x]/verify/evidence
     def process(self, **_params):  # type: ignore[no-untyped-def]
         """Verify attestation evidence.
@@ -53,8 +55,7 @@ class EvidenceController(Controller):
         if self.major_version and self.major_version <= 2:
             self._process_v2()
         else:
-            self.respond(404)
-            # TODO: Replace with v3 implementation
+            self._process_v3(**_params)
 
     def _process_v2(self) -> None:
         json_body: Dict[str, Any] = {}
@@ -240,3 +241,81 @@ class EvidenceController(Controller):
         except Exception as e:
             logger.warning("Failed to process /verify/evidence evidence in SEV-SNP verifier: %s", e)
             raise
+
+    # ---- v3 implementation ----
+
+    @Controller.require_json_api
+    def _process_v3(self, evidence: Optional[Dict[str, Any]] = None, **_params: Any) -> None:
+        if not evidence:
+            APIError("invalid_request", 400).set_detail(  # type: ignore[no-untyped-call]
+                "Request body must include evidence data with type 'evidence'."
+            ).send_via(self)
+
+        assert evidence is not None
+
+        evidence_type = evidence.get("evidence_type")
+        if not evidence_type:
+            APIError("invalid_resource_data").set_detail(  # type: ignore[no-untyped-call]
+                "Attribute 'evidence_type' is required."
+            ).send_via(self)
+
+        data = evidence.get("data")
+        if not data:
+            APIError("invalid_resource_data").set_detail(  # type: ignore[no-untyped-call]
+                "Attribute 'data' is required."
+            ).send_via(self)
+
+        assert data is not None
+
+        try:
+            if evidence_type == "tpm":
+                claims, attestation_failure = self._tpm_verify(data)
+            elif evidence_type == "tee":
+                claims, attestation_failure = self._tee_verify(data)
+            else:
+                APIError("invalid_resource_data").set_detail(  # type: ignore[no-untyped-call]
+                    f"Invalid evidence type: {evidence_type}"
+                ).send_via(self)
+                return  # unreachable but satisfies type checker
+
+            result_attrs: Dict[str, Any] = {
+                "valid": False,
+                "claims": {},
+                "failures": [],
+            }
+
+            if attestation_failure and attestation_failure.events:
+                failures = []
+                is_input_error = False
+                for event in attestation_failure.events:
+                    failures.append(
+                        {
+                            "type": event.event_id,
+                            "context": json.loads(event.context),
+                        }
+                    )
+                    if event.event_id.endswith(".missing_param") or event.event_id.endswith(".missing_policy"):
+                        is_input_error = True
+                result_attrs["failures"] = failures
+
+                if is_input_error:
+                    APIError("invalid_resource_data", 400).set_detail(  # type: ignore[no-untyped-call]
+                        "Missing required evidence parameters."
+                    ).send_via(self)
+            else:
+                result_attrs["valid"] = True
+                result_attrs["claims"] = claims
+
+            APIResource(
+                "evidence_result",
+                result_attrs,
+            ).include(APILink("self", f"/v{self.version}/verify/evidence")).send_via(
+                self, code=200
+            )  # type: ignore[no-untyped-call]
+
+        except StopAction:
+            raise
+        except Exception:
+            APIError("server_error", 500).set_detail(  # type: ignore[no-untyped-call]
+                "Internal Server Error: Failed to process attestation data."
+            ).send_via(self)
