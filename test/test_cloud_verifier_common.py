@@ -543,9 +543,13 @@ class TestSQLAlchemy20APIUsage(unittest.TestCase):
         """Verify verifier modules don't use deprecated session.query().get()."""
         deprecated_pattern = r"session\.query\([^)]+\)\.get\("
 
-        for filename in ("verifier_db_manager.py", "cloud_verifier_tornado.py"):
-            filepath = os.path.join(os.path.dirname(__file__), "..", "keylime", filename)
+        files_to_check = [
+            os.path.join(os.path.dirname(__file__), "..", "keylime", "verifier_db_manager.py"),
+            os.path.join(os.path.dirname(__file__), "..", "keylime", "cloud_verifier_tornado.py"),
+            os.path.join(os.path.dirname(__file__), "..", "keylime", "web", "verifier", "agent_controller.py"),
+        ]
 
+        for filepath in files_to_check:
             with open(filepath, encoding="utf-8") as f:
                 source = f.read()
 
@@ -553,7 +557,7 @@ class TestSQLAlchemy20APIUsage(unittest.TestCase):
 
             if matches:
                 self.fail(
-                    f"Found deprecated session.query().get() usage in {filename}. "
+                    f"Found deprecated session.query().get() usage in {os.path.basename(filepath)}. "
                     f"This causes errors with SQLAlchemy 2.0.39+. "
                     f"Use session.get(Model, id) instead. "
                     f"Matches found: {matches}"
@@ -564,16 +568,19 @@ class TestSQLAlchemy20APIUsage(unittest.TestCase):
         modern_pattern = r"session\.get\(VerfierMain,"
         total_matches = 0
 
-        for filename in ("verifier_db_manager.py", "cloud_verifier_tornado.py"):
-            filepath = os.path.join(os.path.dirname(__file__), "..", "keylime", filename)
+        files_to_check = [
+            os.path.join(os.path.dirname(__file__), "..", "keylime", "verifier_db_manager.py"),
+            os.path.join(os.path.dirname(__file__), "..", "keylime", "web", "verifier", "agent_controller.py"),
+        ]
 
+        for filepath in files_to_check:
             with open(filepath, encoding="utf-8") as f:
                 source = f.read()
 
             matches = re.findall(modern_pattern, source)
             total_matches += len(matches)
 
-        # We expect at least 2 occurrences across both files
+        # We expect at least 2 occurrences across verifier modules
         self.assertGreaterEqual(
             total_matches,
             2,
@@ -613,44 +620,43 @@ class TestSQLAlchemy20APIUsage(unittest.TestCase):
         )
 
 
-class TestAgentsHandlerDeleteCodeAnalysis(unittest.TestCase):
-    """Test AgentsHandler.delete() uses SQLAlchemy 2.0 API via source code analysis.
+class TestAgentControllerDeleteCodeAnalysis(unittest.TestCase):
+    """Test AgentController.delete() uses SQLAlchemy 2.0 API via source code analysis.
 
     These tests verify the code structure to ensure session.get() is used
-    instead of deprecated query().get() in AgentsHandler.delete().
+    instead of deprecated query().get() in AgentController.delete().
     """
 
-    def test_agents_handler_delete_uses_session_get(self):
-        """Verify AgentsHandler.delete() uses session.get() not deprecated query().get()."""
+    def test_agent_controller_delete_uses_session_get(self):
+        """Verify AgentController.delete() uses session.get() not deprecated query().get()."""
         # Read the source code
-        verifier_tornado_path = os.path.join(os.path.dirname(__file__), "..", "keylime", "cloud_verifier_tornado.py")
+        controller_path = os.path.join(
+            os.path.dirname(__file__), "..", "keylime", "web", "verifier", "agent_controller.py"
+        )
 
-        with open(verifier_tornado_path, encoding="utf-8") as f:
+        with open(controller_path, encoding="utf-8") as f:
             source = f.read()
-
-        # Find lines around session.get in AgentsHandler context
-        # Looking for the specific pattern: update_agent = session.get(VerfierMain, agent_id)
-        # This appears in the delete method at line 554
 
         # Check that the modified line exists (SQLAlchemy 2.0 API)
         self.assertIn(
             "update_agent = session.get(VerfierMain, agent_id)",
             source,
-            "AgentsHandler.delete should use session.get(VerfierMain, agent_id) per SQLAlchemy 2.0 API",
+            "AgentController.delete should use session.get(VerfierMain, agent_id) per SQLAlchemy 2.0 API",
         )
 
-        # Ensure it's in the context of AgentsHandler class
-        # Find the AgentsHandler class and verify it contains session.get
-        agents_handler_start = source.find("class AgentsHandler")
-        self.assertNotEqual(agents_handler_start, -1, "AgentsHandler class not found")
+        # Ensure it's in the context of AgentController class
+        controller_start = source.find("class AgentController")
+        self.assertNotEqual(controller_start, -1, "AgentController class not found")
 
-        # Find the next class after AgentsHandler to define the boundary
-        next_class = source.find("\nclass ", agents_handler_start + 1)
-        agents_handler_section = source[agents_handler_start : next_class if next_class != -1 else len(source)]
+        # Find the next class after AgentController to define the boundary
+        next_class = source.find("\nclass ", controller_start + 1)
+        controller_section = source[controller_start : next_class if next_class != -1 else len(source)]
 
-        # Verify session.get is in AgentsHandler
+        # Verify session.get is in AgentController
         self.assertIn(
-            "session.get(VerfierMain, agent_id)", agents_handler_section, "session.get() must be used in AgentsHandler"
+            "session.get(VerfierMain, agent_id)",
+            controller_section,
+            "session.get() must be used in AgentController",
         )
 
 
