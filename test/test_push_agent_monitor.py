@@ -106,7 +106,7 @@ class TestPushAgentMonitor(unittest.TestCase):
         return agent
 
     @patch("keylime.push_agent_monitor.config")
-    @patch("keylime.cloud_verifier_tornado.session_context")
+    @patch("keylime.verifier_db_manager.session_context")
     @patch("keylime.push_agent_monitor.time.time")
     def test_check_push_agent_timeouts_healthy_agent(self, mock_time, mock_session_context, mock_config):
         """Test that healthy agents are not marked as failed."""
@@ -134,7 +134,7 @@ class TestPushAgentMonitor(unittest.TestCase):
         self.assertTrue(agent.accept_attestations)
 
     @patch("keylime.push_agent_monitor.config")
-    @patch("keylime.cloud_verifier_tornado.session_context")
+    @patch("keylime.verifier_db_manager.session_context")
     @patch("keylime.push_agent_monitor.time.time")
     def test_check_push_agent_timeouts_timed_out_agent(self, mock_time, mock_session_context, mock_config):
         """Test that timed-out agents are marked as failed."""
@@ -164,7 +164,7 @@ class TestPushAgentMonitor(unittest.TestCase):
         self.assertFalse(agent.accept_attestations)
 
     @patch("keylime.push_agent_monitor.config")
-    @patch("keylime.cloud_verifier_tornado.session_context")
+    @patch("keylime.verifier_db_manager.session_context")
     @patch("keylime.push_agent_monitor.time.time")
     def test_check_push_agent_timeouts_never_received_attestation(self, mock_time, mock_session_context, mock_config):
         """Test that agents that never received an attestation are not marked as failed."""
@@ -192,7 +192,7 @@ class TestPushAgentMonitor(unittest.TestCase):
         self.assertTrue(agent.accept_attestations)
 
     @patch("keylime.push_agent_monitor.config")
-    @patch("keylime.cloud_verifier_tornado.session_context")
+    @patch("keylime.verifier_db_manager.session_context")
     @patch("keylime.push_agent_monitor.time.time")
     def test_check_push_agent_timeouts_sentinel_zero_not_timed_out(self, mock_time, mock_session_context, mock_config):
         """Test that agents with sentinel last_received_quote=0 are not marked as timed out."""
@@ -244,7 +244,7 @@ class TestPushAgentMonitor(unittest.TestCase):
         self.assertFalse(agent.accept_attestations)
 
     @patch("keylime.push_agent_monitor.config")
-    @patch("keylime.cloud_verifier_tornado.session_context")
+    @patch("keylime.verifier_db_manager.session_context")
     @patch("keylime.push_agent_monitor.time.time")
     def test_check_push_agent_timeouts_pull_mode_agent_ignored(self, mock_time, mock_session_context, mock_config):
         """Test that PULL mode agents are ignored by the timeout check."""
@@ -274,7 +274,7 @@ class TestPushAgentMonitor(unittest.TestCase):
         self.assertTrue(agent.accept_attestations)
 
     @patch("keylime.push_agent_monitor.config")
-    @patch("keylime.cloud_verifier_tornado.session_context")
+    @patch("keylime.verifier_db_manager.session_context")
     @patch("keylime.push_agent_monitor.time.time")
     def test_check_push_agent_timeouts_multiple_agents(self, mock_time, mock_session_context, mock_config):
         """Test timeout detection with multiple agents in different states."""
@@ -598,7 +598,7 @@ class TestPushAgentMonitor(unittest.TestCase):
         self.assertEqual(len(_agent_timeout_handles), 0)
 
     @patch("keylime.push_agent_monitor.config")
-    @patch("keylime.cloud_verifier_tornado.session_context")
+    @patch("keylime.verifier_db_manager.session_context")
     def test_mark_agent_failed_success(self, mock_session_context, mock_config):
         """Test successfully marking an agent as failed."""
         # Configure mocks
@@ -626,7 +626,7 @@ class TestPushAgentMonitor(unittest.TestCase):
         self.assertNotIn("test-agent-1", _agent_timeout_handles)
 
     @patch("keylime.push_agent_monitor.config")
-    @patch("keylime.cloud_verifier_tornado.session_context")
+    @patch("keylime.verifier_db_manager.session_context")
     def test_mark_agent_failed_already_failed(self, mock_session_context, mock_config):
         """Test marking an already-failed agent (should be a no-op)."""
         # Configure mocks
@@ -648,7 +648,7 @@ class TestPushAgentMonitor(unittest.TestCase):
         self.assertFalse(agent.accept_attestations)
 
     @patch("keylime.push_agent_monitor.logger")
-    @patch("keylime.cloud_verifier_tornado.session_context")
+    @patch("keylime.verifier_db_manager.session_context")
     def test_mark_agent_failed_agent_not_found(self, mock_session_context, mock_logger):
         """Test marking an agent that doesn't exist in the database."""
         # Configure mocks
@@ -671,7 +671,7 @@ class TestPushAgentMonitor(unittest.TestCase):
 
     @patch("keylime.push_agent_monitor.logger")
     @patch("keylime.push_agent_monitor.config")
-    @patch("keylime.cloud_verifier_tornado.session_context")
+    @patch("keylime.verifier_db_manager.session_context")
     def test_mark_agent_failed_logs_timeout_info(self, mock_session_context, mock_config, mock_logger):
         """Test that marking an agent as failed logs appropriate information."""
         # Configure mocks
@@ -701,7 +701,7 @@ class TestPushAgentMonitor(unittest.TestCase):
         self.assertEqual(mock_logger.warning.call_args[0][2], expected_timeout)
 
     @patch("keylime.push_agent_monitor.logger")
-    @patch("keylime.cloud_verifier_tornado.session_context")
+    @patch("keylime.verifier_db_manager.session_context")
     def test_mark_agent_failed_handles_exception(self, mock_session_context, mock_logger):
         """Test that exceptions during mark_agent_failed are caught and logged."""
         # Configure mock to raise exception
@@ -722,7 +722,7 @@ class TestPushAgentMonitor(unittest.TestCase):
         self.assertNotIn("test-agent-4", _agent_timeout_handles)
 
     @patch("keylime.push_agent_monitor.config")
-    @patch("keylime.cloud_verifier_tornado.session_context")
+    @patch("keylime.verifier_db_manager.session_context")
     def test_mark_agent_failed_removes_handle_before_db_update(self, mock_session_context, mock_config):
         """Test that the timeout handle is removed before attempting database update."""
         # Configure mocks
