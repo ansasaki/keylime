@@ -73,10 +73,11 @@ class TestServerInfoControllerShowVersionRoot(unittest.TestCase):
     def test_show_version_root_v3_returns_200(self):
         """Test that v3+ version root returns 200."""
         self.controller.action_handler.request.path = "/v3.0/"
+        self.controller.send_response = MagicMock()
 
         self.controller.show_version_root()
 
-        self.controller.respond.assert_called_once_with(200)
+        self.controller.send_response.assert_called_once_with(code=200)
 
 
 class TestServerInfoControllerShowVersions(unittest.TestCase):

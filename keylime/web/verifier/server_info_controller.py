@@ -23,7 +23,7 @@ class ServerInfoController(Controller):
         if self.major_version and self.major_version <= 2:
             self.respond(405, "Not Implemented: Use /agents/ interface instead")
         else:
-            self.respond(200)
+            self.send_response(code=200)
 
     # GET /version[s]
     def show_versions(self, **_params):

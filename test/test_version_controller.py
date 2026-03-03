@@ -54,9 +54,11 @@ class TestVersionControllerShowVersionRoot(unittest.TestCase):
 
     def test_show_version_root_returns_success(self):
         """Test that show_version_root() returns 200 Success with no data."""
+        self.controller.send_response = MagicMock()  # type: ignore[assignment]
+
         self.controller.show_version_root()
 
-        self.mock_respond.assert_called_once_with(200, "Success")
+        self.controller.send_response.assert_called_once_with(code=200)
 
 
 if __name__ == "__main__":

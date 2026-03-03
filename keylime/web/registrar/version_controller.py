@@ -17,4 +17,4 @@ class VersionController(Controller):
     # GET /v3[.0]/
     def show_version_root(self, **_params):
         """A request to the top-level path of a given API version returns 200 when supported."""
-        self.respond(200, "Success")
+        self.send_response(code=200)
