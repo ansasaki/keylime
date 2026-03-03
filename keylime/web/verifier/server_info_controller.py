@@ -39,7 +39,7 @@ class ServerInfoController(Controller):
         if self.major_version and self.major_version <= 2:
             self._new_v2_main_handler().get()  # type: ignore[no-untyped-call]
         else:
-            self.respond(200)
+            self.send_response(code=200)
 
     # GET /version[s]
     def show_versions(self, **_params):
