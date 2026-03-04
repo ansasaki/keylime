@@ -935,8 +935,8 @@ class TPMEngine(VerificationEngine):
         return bool(
             self.agent.ima_policy
             and self.agent.ima_policy.ima_policy
-            and self.agent.ima_policy.generator
-            and self.agent.ima_policy.generator > ima.RUNTIME_POLICY_GENERATOR.EmptyAllowList
+            and self.agent.ima_policy.generator is not None
+            and self.agent.ima_policy.generator != ima.RUNTIME_POLICY_GENERATOR.EmptyAllowList
         )
 
     @property

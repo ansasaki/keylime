@@ -9,6 +9,7 @@ import unittest
 from unittest.mock import MagicMock, PropertyMock, patch
 
 from keylime.failure import Component, Failure
+from keylime.ima import ima
 from keylime.verification.tpm_engine import TPMEngine
 
 
@@ -329,6 +330,77 @@ class TestTPMEngineFreshPolicy(unittest.TestCase):
         # Verify the fresh agent was returned
         self.assertEqual(agent.attestation_count, 5)
         self.assertIs(agent, fresh_agent)
+
+
+class TestTPMEngineExpectsImaLog(unittest.TestCase):
+    """Tests for TPMEngine.expects_ima_log property with different generator values"""
+
+    def _create_engine(self, ima_policy=None, generator=None, ima_policy_body=None):
+        """Create a TPMEngine with a mock agent configured for expects_ima_log testing"""
+        mock_attestation = MagicMock()
+        mock_attestation.agent_id = "test-agent-123"
+        mock_attestation.system_info = None
+        mock_attestation.evidence = MagicMock()
+
+        mock_agent = MagicMock()
+        mock_agent.agent_id = "test-agent-123"
+        mock_agent.mb_policy = None
+        mock_agent.tpm_policy = {}
+        mock_agent.ak_tpm = "mock-ak"
+        mock_agent.accept_tpm_signing_algs = []
+        mock_agent.accept_tpm_hash_algs = []
+
+        if ima_policy is None and generator is not None:
+            mock_agent.ima_policy = MagicMock()
+            mock_agent.ima_policy.generator = generator
+            mock_agent.ima_policy.ima_policy = ima_policy_body if ima_policy_body is not None else {"digests": {}}
+        else:
+            mock_agent.ima_policy = ima_policy
+
+        mock_attestation.agent = mock_agent
+        return TPMEngine(mock_attestation)
+
+    def test_expects_ima_log_generator_unknown_with_policy_body(self):
+        """Generator Unknown (0) with a policy body should expect IMA log"""
+        engine = self._create_engine(generator=ima.RUNTIME_POLICY_GENERATOR.Unknown)
+        self.assertTrue(engine.expects_ima_log)
+
+    def test_expects_ima_log_generator_empty_allowlist(self):
+        """Generator EmptyAllowList (1) should NOT expect IMA log"""
+        engine = self._create_engine(generator=ima.RUNTIME_POLICY_GENERATOR.EmptyAllowList)
+        self.assertFalse(engine.expects_ima_log)
+
+    def test_expects_ima_log_generator_compatible_allowlist(self):
+        """Generator CompatibleAllowList (2) should expect IMA log"""
+        engine = self._create_engine(generator=ima.RUNTIME_POLICY_GENERATOR.CompatibleAllowList)
+        self.assertTrue(engine.expects_ima_log)
+
+    def test_expects_ima_log_generator_legacy_allowlist(self):
+        """Generator LegacyAllowList (3) should expect IMA log"""
+        engine = self._create_engine(generator=ima.RUNTIME_POLICY_GENERATOR.LegacyAllowList)
+        self.assertTrue(engine.expects_ima_log)
+
+    def test_expects_ima_log_generator_none(self):
+        """Generator None (NULL in DB) should NOT expect IMA log"""
+        engine = self._create_engine(generator=None)
+        self.assertFalse(engine.expects_ima_log)
+
+    def test_expects_ima_log_no_ima_policy(self):
+        """No ima_policy at all should NOT expect IMA log"""
+        engine = self._create_engine(ima_policy=None, generator=None)
+        # Re-set ima_policy to None directly
+        engine.attestation.agent.ima_policy = None
+        self.assertFalse(engine.expects_ima_log)
+
+    def test_expects_ima_log_no_policy_body(self):
+        """ima_policy with no body (ima_policy=None) should NOT expect IMA log"""
+        engine = self._create_engine(
+            generator=ima.RUNTIME_POLICY_GENERATOR.LegacyAllowList,
+            ima_policy_body=None,
+        )
+        # Set the ima_policy body to None/falsy to test the ima_policy.ima_policy check
+        engine.attestation.agent.ima_policy.ima_policy = None
+        self.assertFalse(engine.expects_ima_log)
 
 
 if __name__ == "__main__":

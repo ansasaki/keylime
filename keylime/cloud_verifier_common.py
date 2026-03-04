@@ -267,7 +267,10 @@ def process_get_status(agent: VerfierMain) -> Dict[str, Any]:
         has_mb_policy = 1
 
     has_runtime_policy = 0
-    if agent.ima_policy.generator and agent.ima_policy.generator > ima.RUNTIME_POLICY_GENERATOR.EmptyAllowList:
+    if (
+        agent.ima_policy.generator is not None
+        and agent.ima_policy.generator != ima.RUNTIME_POLICY_GENERATOR.EmptyAllowList
+    ):
         has_runtime_policy = 1
 
     # Get attestation status based on mode (PUSH vs PULL)
