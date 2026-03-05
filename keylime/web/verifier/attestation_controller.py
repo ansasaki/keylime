@@ -158,7 +158,7 @@ class AttestationController(Controller):
 
     # GET /v3[.:minor]/agents/:agent_id/attestations
     def index(self, agent_id, **_params):  # type: ignore[no-untyped-def]
-        agent = cast(VerifierAgent | None, VerifierAgent.get(agent_id))
+        agent = VerifierAgent.get(agent_id)
 
         if not agent:
             APIError("not_found", f"No enrolled agent with ID '{agent_id}'.").send_via(self)
@@ -184,8 +184,8 @@ class AttestationController(Controller):
 
     # GET /v3[.:minor]/agents/:agent_id/attestations/:index
     def show(self, agent_id, index, **_params):  # type: ignore[no-untyped-def]
-        agent = cast(VerifierAgent | None, VerifierAgent.get(agent_id))
-        attestation = cast(Attestation | None, Attestation.get(agent_id=agent_id, index=index))
+        agent = VerifierAgent.get(agent_id)
+        attestation = Attestation.get(agent_id=agent_id, index=index)
 
         if not agent:
             APIError("not_found", f"No enrolled agent with ID '{agent_id}'.").send_via(self)
@@ -201,7 +201,7 @@ class AttestationController(Controller):
 
     # GET /v3[.:minor]/agents/:agent_id/attestations/latest
     def show_latest(self, agent_id, **_params):  # type: ignore[no-untyped-def]
-        agent = cast(VerifierAgent | None, VerifierAgent.get(agent_id))
+        agent = VerifierAgent.get(agent_id)
 
         if not agent:
             APIError("not_found", f"No enrolled agent with ID '{agent_id}'.").send_via(self)
@@ -214,7 +214,7 @@ class AttestationController(Controller):
     # POST /v3[.:minor]/agents/:agent_id/attestations
     @Controller.require_json_api
     def create(self, agent_id, attestation, **params):  # type: ignore[no-untyped-def]  # pylint: disable=unused-argument
-        agent = cast(VerifierAgent | None, VerifierAgent.get(agent_id))
+        agent = VerifierAgent.get(agent_id)
 
         if not agent:
             APIError("not_found", f"No enrolled agent with ID '{agent_id}'.").send_via(self)
@@ -310,7 +310,7 @@ class AttestationController(Controller):
         # Extract attestation from params - it should be provided by the API request
         attestation = params.get("attestation")
 
-        agent = cast(VerifierAgent | None, VerifierAgent.get(agent_id))
+        agent = VerifierAgent.get(agent_id)
 
         if not agent:
             APIError("not_found", f"No enrolled agent with ID '{agent_id}'.").send_via(self)
@@ -368,7 +368,7 @@ class AttestationController(Controller):
     # PATCH /v3[.:minor]/agents/:agent_id/attestations/latest
     @Controller.require_json_api
     def update_latest(self, agent_id, **params):  # type: ignore[no-untyped-def]
-        agent = cast(VerifierAgent | None, VerifierAgent.get(agent_id))
+        agent = VerifierAgent.get(agent_id)
 
         if not agent:
             APIError("not_found", f"No enrolled agent with ID '{agent_id}'.").send_via(self)
