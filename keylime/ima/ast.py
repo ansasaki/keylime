@@ -391,6 +391,13 @@ class Entry:
                 failure.add_event("tomtou", "hash validation was skipped", True)
             return failure
         if self.ima_template_hash != self._ima_hash_alg.hash(self._bytes):
+            # Extract a human-readable identifier from the mode for diagnostic logging
+            mode_path = getattr(self.mode, "path", None) or getattr(self.mode, "name", None)
+            logger.warning(
+                "IMA template hash for %s does not match (hash algorithm: %s)",
+                mode_path,
+                self._ima_hash_alg,
+            )
             failure.add_event(
                 "ima_hash",
                 {
