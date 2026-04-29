@@ -2190,8 +2190,17 @@ async def update_agent_api_version(
                     if key in agent_db:
                         del agent_db[key]
 
-                session.query(VerfierMain).filter_by(agent_id=agent_id).update(agent_db)  # pyright: ignore
+                rows = (
+                    session.query(VerfierMain)
+                    .filter_by(agent_id=agent_id)
+                    .filter(VerfierMain.operational_state != states.TERMINATED)  # pyright: ignore
+                    .update(agent_db)  # pyright: ignore
+                )
                 # session.commit() is automatically called by context manager
+
+            if rows == 0:
+                logger.info("Agent %s was terminated during version negotiation, stopping", agent_id)
+                return None
 
         else:
             logger.warning("Agent %s did not provide version information", agent_id)
@@ -2584,10 +2593,20 @@ async def process_agent(
                         for key in exclude_db:
                             if key in agent:
                                 del agent[key]
-                        session.query(VerfierMain).filter_by(agent_id=agent["agent_id"]).update(
-                            agent  # type: ignore[arg-type]
+                        rows = (
+                            session.query(VerfierMain)
+                            .filter_by(agent_id=agent["agent_id"])
+                            .filter(VerfierMain.operational_state != states.TERMINATED)  # pyright: ignore
+                            .update(agent)  # type: ignore[arg-type]
                         )
                         # session.commit() is automatically called by context manager
+
+                    if rows == 0:
+                        logger.info(
+                            "Agent %s was terminated during attestation, stopping poll cycle",
+                            agent["agent_id"],
+                        )
+                        return
 
         # propagate all state, but remove none DB keys first (using exclude_db)
         try:
@@ -2596,10 +2615,26 @@ async def process_agent(
                 if key in agent_db:
                     del agent_db[key]
 
-            # Fourth database operation - update agent state
+            # Fourth database operation - update agent state.
+            # The TERMINATED filter prevents a TOCTOU race: if a DELETE
+            # handler set TERMINATED between our initial read and this
+            # write, the update matches zero rows and we stop polling
+            # instead of reverting the agent back to an active state.
             with session_context() as session:
-                session.query(VerfierMain).filter_by(agent_id=agent_db["agent_id"]).update(agent_db)  # pyright: ignore
+                rows = (
+                    session.query(VerfierMain)
+                    .filter_by(agent_id=agent_db["agent_id"])
+                    .filter(VerfierMain.operational_state != states.TERMINATED)  # pyright: ignore
+                    .update(agent_db)  # pyright: ignore
+                )
                 # session.commit() is automatically called by context manager
+
+            if rows == 0:
+                logger.info(
+                    "Agent %s was terminated or deleted during attestation, stopping poll cycle",
+                    agent["agent_id"],
+                )
+                return
         except SQLAlchemyError as e:
             logger.error("SQLAlchemy Error for agent ID %s: %s", agent["agent_id"], e)
 
