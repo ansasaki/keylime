@@ -1,4 +1,6 @@
 import base64
+import hashlib
+import hmac
 import struct
 import zlib
 from typing import Any, Dict, List, Optional, Set, Tuple, Union
@@ -162,17 +164,23 @@ class Tpm:
 
     @staticmethod
     def verify_aik_with_iak(uuid: str, aik_tpm: bytes, iak_tpm: bytes, iak_attest: bytes, iak_sign: bytes) -> bool:
-        attest_body = iak_attest.split(b"\x00$")[1]
+        _qualified_signer, rest = Tpm._unpackv(iak_attest, 6)
+        extra_data, rest = Tpm._unpackv(rest)
         iak_pub = tpm2_objects.pubkey_from_tpm2b_public(iak_tpm)
 
-        # check UUID in certify matches UUID registering
-        if attest_body[: len(uuid)] != bytes(uuid, "utf-8"):
-            logger.warning("Agent %s AIK verification failed, uuid does not match attest info", uuid)
+        # check qualifying data: accept SHA-256 hash of UUID (new agents) or raw UUID (old agents)
+        expected_hashed = hashlib.sha256(uuid.encode("utf-8")).digest()
+        if hmac.compare_digest(extra_data, expected_hashed):
+            pass
+        elif hmac.compare_digest(extra_data, uuid.encode("utf-8")):
+            logger.info("Agent %s uses raw UUID as qualifying data (pre-2.6 format)", uuid)
+        else:
+            logger.warning("Agent %s AIK verification failed, qualifying data does not match agent ID", uuid)
             return False
 
         # check aik in certify matches aik being registered
-        if tpm2_objects.get_tpm2b_public_name(aik_tpm) != attest_body[len(uuid) + 27 : len(uuid) + 61].hex():
-            logger.warning(" Agent %s AIK verification failed, name of aik does not match attest info", uuid)
+        if tpm2_objects.get_tpm2b_public_name(aik_tpm) != rest[27:61].hex():
+            logger.warning("Agent %s AIK verification failed, name of aik does not match attest info", uuid)
             return False
 
         # generate digest of attest info
