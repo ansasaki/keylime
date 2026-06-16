@@ -2,12 +2,12 @@ import asyncio
 import base64
 from typing import Any, Dict, Optional, cast
 
-from keylime import cloud_verifier_common, config, keylime_logging, web_util
+from keylime import cloud_verifier_common, config, keylime_logging, push_agent_monitor, web_util
+from keylime.agentstates import AgentAttestStates
 from keylime.common import states, validators
-from keylime.models.verifier import IMAPolicy, MBPolicy
+from keylime.models.verifier import Attestation, EvidenceItem, IMAPolicy, MBPolicy
 from keylime.models.verifier import VerifierAgent as VerifierAgentModel
 from keylime.shared_data import clear_agent_policy_cache
-from keylime.verifier_db_manager import session_context, verifier_db_delete_agent
 from keylime.web.base import APIError, APILink, APIResource, Controller
 from keylime.web.verifier.agent_service import build_agent_data, validate_mtls_cert
 from keylime.web.verifier.ima_policy_service import resolve_ima_policy_for_agent
@@ -319,32 +319,59 @@ class AgentController(Controller):
         if not mode:
             mode = "pull"
 
-        # TODO (Phase 3): Replace with PersistableModel-based deletion
-        with session_context() as session:
-            if mode == "push":
-                verifier_db_delete_agent(session, agent_id)
+        if mode == "push":
+            _delete_agent_v3(agent, agent_id)
+            self.send_response(204)
+        else:
+            op_state = agent.operational_state  # type: ignore[attr-defined]
+            if op_state in (
+                states.SAVED,
+                states.FAILED,
+                states.TERMINATED,
+                states.TENANT_FAILED,
+                states.INVALID_QUOTE,
+            ):
+                _delete_agent_v3(agent, agent_id)
                 self.send_response(204)
             else:
-                op_state = agent.operational_state  # type: ignore[attr-defined]
-                if op_state in (
-                    states.SAVED,
-                    states.FAILED,
-                    states.TERMINATED,
-                    states.TENANT_FAILED,
-                    states.INVALID_QUOTE,
-                ):
-                    verifier_db_delete_agent(session, agent_id)
-                    self.send_response(204)
-                else:
-                    from keylime.db.verifier_db import VerfierMain  # pylint: disable=import-outside-toplevel
+                agent.change("operational_state", states.TERMINATED)  # type: ignore[no-untyped-call]
+                agent.commit_changes()  # type: ignore[no-untyped-call]
+                self.send_response(202)
 
-                    update_agent = session.get(VerfierMain, agent_id)  # type: ignore[attr-defined]
-                    if update_agent is None:
-                        APIError("not_found", f"Agent '{agent_id}' not found.").send_via(self)
-                        return
-                    update_agent.operational_state = states.TERMINATED  # pyright: ignore
-                    session.add(update_agent)
-                    self.send_response(202)
+
+def _delete_agent_v3(agent: VerifierAgentModel, agent_id: str) -> None:
+    """Delete an agent and all associated data in a single transaction."""
+    push_agent_monitor.cancel_agent_timeout(agent_id)
+    AgentAttestStates.get_instance().delete_by_agent_id(agent_id)
+
+    # pylint: disable=import-outside-toplevel
+    from keylime.db.verifier_db import VerifierAttestations
+    from keylime.models.base import db_manager
+
+    with db_manager.session_context() as session:
+        EvidenceItem.delete_all(agent_id=agent_id, session_=session)
+        Attestation.delete_all(agent_id=agent_id, session_=session)
+        session.query(VerifierAttestations).filter_by(agent_id=agent_id).delete()
+        agent.delete(session=session, include_dependants=False)  # type: ignore[no-untyped-call]
+        _cleanup_agent_named_policies(agent_id, session=session)
+
+
+def _cleanup_agent_named_policies(agent_id: str, session: Any = None) -> None:
+    """Remove policies named after the agent if no other agents reference them.
+
+    When session is provided, deletes run within the caller's transaction.
+    """
+    ima = IMAPolicy.get(name=agent_id)
+    if ima:
+        refs = VerifierAgentModel.all_ids(ima_policy_id=ima.id)  # type: ignore[no-untyped-call, attr-defined]
+        if not refs:
+            ima.delete(session=session)  # type: ignore[no-untyped-call]
+
+    mb = MBPolicy.get(name=agent_id)
+    if mb:
+        refs = VerifierAgentModel.all_ids(mb_policy_id=mb.id)  # type: ignore[no-untyped-call, attr-defined]
+        if not refs:
+            mb.delete(session=session)  # type: ignore[no-untyped-call]
 
 
 def _start_pull_polling(agent_data: Dict[str, Any], agent_id: str) -> None:

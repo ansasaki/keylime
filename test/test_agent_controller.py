@@ -131,9 +131,8 @@ class TestAgentControllerCreate(unittest.TestCase):
     @patch(f"{MODULE}.validate_mtls_cert")
     @patch(f"{MODULE}.build_agent_data")
     @patch(f"{MODULE}.config")
-    @patch(f"{MODULE}.session_context")
     def test_create_v3_success_returns_201(
-        self, mock_session_ctx, mock_config, mock_build, mock_mtls, mock_ima_svc, mock_mb_svc, mock_agent_model
+        self, mock_config, mock_build, mock_mtls, mock_ima_svc, mock_mb_svc, mock_agent_model
     ):
         """Test that v3 create succeeds and returns agent resource."""
         controller = _v3_controller()
@@ -143,12 +142,12 @@ class TestAgentControllerCreate(unittest.TestCase):
         mock_config.get.return_value = "push"
         mock_build.return_value = {"agent_id": "valid-uuid-1234", "supported_version": "2.1", "mtls_cert": None}
         mock_mtls.return_value = None
-        mock_session = MagicMock()
-        mock_session_ctx.return_value.__enter__ = MagicMock(return_value=mock_session)
-        mock_session_ctx.return_value.__exit__ = MagicMock(return_value=False)
-        mock_session.query.return_value.filter_by.return_value.count.return_value = 0
-        mock_ima_svc.return_value = (MagicMock(), None)
-        mock_mb_svc.return_value = (MagicMock(), None)
+        mock_ima_policy = MagicMock()
+        mock_ima_policy.id = 1
+        mock_mb_policy = MagicMock()
+        mock_mb_policy.id = 2
+        mock_ima_svc.return_value = (mock_ima_policy, None)
+        mock_mb_svc.return_value = (mock_mb_policy, None)
 
         mock_created = MagicMock()
         mock_created.agent_id = "valid-uuid-1234"
@@ -220,14 +219,13 @@ class TestAgentControllerCreate(unittest.TestCase):
 class TestAgentControllerDelete(unittest.TestCase):
     """Test cases for AgentController.delete()."""
 
-    @patch(f"{MODULE}.verifier_db_delete_agent")
+    @patch(f"{MODULE}._delete_agent_v3")
     @patch(f"{MODULE}.clear_agent_policy_cache")
     @patch(f"{MODULE}.config")
     @patch(f"{MODULE}.cloud_verifier_common")
-    @patch(f"{MODULE}.session_context")
     @patch(f"{MODULE}.VerifierAgentModel")
     def test_delete_v3_push_mode_returns_204(
-        self, mock_agent_model, mock_session_ctx, mock_cvc, mock_config, _mock_clear_cache, mock_db_delete
+        self, mock_agent_model, mock_cvc, mock_config, _mock_clear_cache, mock_delete_fn
     ):
         """Test that v3 delete in push mode returns 204."""
         controller = _v3_controller()
@@ -241,13 +239,10 @@ class TestAgentControllerDelete(unittest.TestCase):
             ("verifier", "mode"): "push",
         }.get((section, key), kw.get("fallback", ""))
         mock_cvc.DEFAULT_VERIFIER_ID = "default"
-        mock_session = MagicMock()
-        mock_session_ctx.return_value.__enter__ = MagicMock(return_value=mock_session)
-        mock_session_ctx.return_value.__exit__ = MagicMock(return_value=False)
 
         controller.delete("test-uuid-1234")
 
-        mock_db_delete.assert_called_once()
+        mock_delete_fn.assert_called_once()
         controller.send_response.assert_called_once_with(204)
 
     @patch(f"{MODULE}.VerifierAgentModel")
@@ -268,11 +263,8 @@ class TestAgentControllerDelete(unittest.TestCase):
     @patch(f"{MODULE}.clear_agent_policy_cache")
     @patch(f"{MODULE}.config")
     @patch(f"{MODULE}.cloud_verifier_common")
-    @patch(f"{MODULE}.session_context")
     @patch(f"{MODULE}.VerifierAgentModel")
-    def test_delete_v3_pull_active_returns_202(
-        self, mock_agent_model, mock_session_ctx, mock_cvc, mock_config, _mock_clear_cache
-    ):
+    def test_delete_v3_pull_active_returns_202(self, mock_agent_model, mock_cvc, mock_config, _mock_clear_cache):
         """Test that v3 delete of active pull-mode agent returns 202."""
         controller = _v3_controller()
         controller.send_response = MagicMock()
@@ -286,11 +278,6 @@ class TestAgentControllerDelete(unittest.TestCase):
             ("verifier", "mode"): "pull",
         }.get((section, key), kw.get("fallback", ""))
         mock_cvc.DEFAULT_VERIFIER_ID = "default"
-        mock_session = MagicMock()
-        mock_session_ctx.return_value.__enter__ = MagicMock(return_value=mock_session)
-        mock_session_ctx.return_value.__exit__ = MagicMock(return_value=False)
-        mock_update_agent = MagicMock()
-        mock_session.get.return_value = mock_update_agent
 
         controller.delete("test-uuid-1234")
 
