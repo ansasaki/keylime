@@ -225,14 +225,13 @@ class TestAgentControllerCreate(unittest.TestCase):
 class TestAgentControllerDelete(unittest.TestCase):
     """Test cases for AgentController.delete()."""
 
-    @patch(f"{MODULE}.verifier_db_delete_agent")
+    @patch(f"{MODULE}._delete_agent_v3")
     @patch(f"{MODULE}.clear_agent_policy_cache")
     @patch(f"{MODULE}.config")
     @patch(f"{MODULE}.cloud_verifier_common")
-    @patch(f"{MODULE}.session_context")
     @patch(f"{MODULE}.VerifierAgentModel")
     def test_delete_v3_push_mode_returns_204(
-        self, mock_agent_model, mock_session_ctx, mock_cvc, mock_config, _mock_clear_cache, mock_db_delete
+        self, mock_agent_model, mock_cvc, mock_config, _mock_clear_cache, mock_delete_fn
     ):
         """Test that v3 delete in push mode returns 204."""
         controller = _v3_controller()
@@ -246,13 +245,10 @@ class TestAgentControllerDelete(unittest.TestCase):
             ("verifier", "mode"): "push",
         }.get((section, key), kw.get("fallback", ""))
         mock_cvc.DEFAULT_VERIFIER_ID = "default"
-        mock_session = MagicMock()
-        mock_session_ctx.return_value.__enter__ = MagicMock(return_value=mock_session)
-        mock_session_ctx.return_value.__exit__ = MagicMock(return_value=False)
 
         controller.delete("test-uuid-1234")
 
-        mock_db_delete.assert_called_once()
+        mock_delete_fn.assert_called_once()
         controller.send_response.assert_called_once_with(204)
 
     @patch(f"{MODULE}.VerifierAgentModel")
@@ -273,11 +269,8 @@ class TestAgentControllerDelete(unittest.TestCase):
     @patch(f"{MODULE}.clear_agent_policy_cache")
     @patch(f"{MODULE}.config")
     @patch(f"{MODULE}.cloud_verifier_common")
-    @patch(f"{MODULE}.session_context")
     @patch(f"{MODULE}.VerifierAgentModel")
-    def test_delete_v3_pull_active_returns_202(
-        self, mock_agent_model, mock_session_ctx, mock_cvc, mock_config, _mock_clear_cache
-    ):
+    def test_delete_v3_pull_active_returns_202(self, mock_agent_model, mock_cvc, mock_config, _mock_clear_cache):
         """Test that v3 delete of active pull-mode agent returns 202."""
         controller = _v3_controller()
         controller.send_response = MagicMock()
@@ -291,11 +284,6 @@ class TestAgentControllerDelete(unittest.TestCase):
             ("verifier", "mode"): "pull",
         }.get((section, key), kw.get("fallback", ""))
         mock_cvc.DEFAULT_VERIFIER_ID = "default"
-        mock_session = MagicMock()
-        mock_session_ctx.return_value.__enter__ = MagicMock(return_value=mock_session)
-        mock_session_ctx.return_value.__exit__ = MagicMock(return_value=False)
-        mock_update_agent = MagicMock()
-        mock_session.get.return_value = mock_update_agent
 
         controller.delete("test-uuid-1234")
 

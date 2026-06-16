@@ -1,9 +1,9 @@
 import base64
 
 from keylime import config, keylime_logging
-from keylime.db.verifier_db import VerfierMain
-from keylime.models.base import Timestamp, db_manager
+from keylime.models.base import Timestamp
 from keylime.models.verifier import AuthSession
+from keylime.models.verifier import VerifierAgent as VerifierAgentModel
 from keylime.web.base import Controller
 
 logger = keylime_logging.init_logging("verifier")
@@ -124,9 +124,7 @@ class SessionController(Controller):
         auth_session_data = sessions_cache.get(session_id)
 
         if not auth_session_data:
-            logger.error(
-                "Session %s not found in cache. Available sessions: %s", session_id, list(sessions_cache.keys())
-            )
+            logger.error("Session %s not found in cache (%d cached)", session_id[:8] + "...", len(sessions_cache))
             error_body = {"errors": [{"status": "404", "title": "Not Found", "detail": "Session not found"}]}
             self.send_response(code=404, body=error_body)
             return
@@ -184,11 +182,7 @@ class SessionController(Controller):
             return
 
         # Check if agent exists - this is where we validate enrollment
-        agent = None
-        with db_manager.session_context() as session:
-            agent = session.query(VerfierMain).filter(VerfierMain.agent_id == agent_id).one_or_none()
-            if agent:
-                session.expunge(agent)  # type: ignore[no-untyped-call]
+        agent = VerifierAgentModel.get(agent_id)
 
         if not agent:
             # Agent not enrolled - return 200 with evaluation:fail
@@ -382,14 +376,10 @@ class SessionController(Controller):
 
     # POST /v3[.:minor]/agents/:agent_id/session
     def create(self, agent_id, **params):
-        agent = None
-        with db_manager.session_context() as session:
-            agent = session.query(VerfierMain).filter(VerfierMain.agent_id == agent_id).one_or_none()
-            if agent:
-                session.expunge(agent)  # type: ignore[no-untyped-call]
+        agent = VerifierAgentModel.get(agent_id)
 
         if not agent:
-            self.respond(404, "here")
+            self.respond(404, "Agent not found")
             return
 
         auth_session = AuthSession.create(agent, params)
@@ -408,11 +398,10 @@ class SessionController(Controller):
         self.respond(200, "Success", auth_session.render())
 
     def update(self, agent_id, token, **params):
-        agent = None
-        with db_manager.session_context() as session:
-            agent = session.query(VerfierMain).filter(VerfierMain.agent_id == agent_id).one_or_none()
-            if agent:
-                session.expunge(agent)  # type: ignore[no-untyped-call]
+        agent = VerifierAgentModel.get(agent_id)
+        if not agent:
+            self.respond(404, "Agent not found")
+            return
 
         # Look up session by token hash (tokens are never stored in plaintext)
         auth_session = AuthSession.get_by_token(token)
@@ -439,4 +428,4 @@ class SessionController(Controller):
         # AuthSession.delete_stale(agent_id)
 
         auth_session.commit_changes()
-        self.respond(200, "Succeses", auth_session.render())
+        self.respond(200, "Success", auth_session.render())

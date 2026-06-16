@@ -1,8 +1,10 @@
+from __future__ import annotations
+
 import base64
 import hmac
 import uuid
 from datetime import timedelta
-from typing import Any, Dict, Optional, Sequence
+from typing import TYPE_CHECKING, Any, Dict, Optional, Sequence, Union
 
 from keylime import config, keylime_logging
 from keylime.crypto import (
@@ -23,6 +25,11 @@ from keylime.tpm.errors import (
     SignatureAlgorithmMismatch,
 )
 from keylime.tpm.tpm_main import Tpm
+
+if TYPE_CHECKING:
+    from keylime.models.verifier.verifier_agent import VerifierAgent
+
+AgentType = Union[VerfierMain, "VerifierAgent"]
 
 logger = keylime_logging.init_logging("verifier")
 
@@ -225,12 +232,10 @@ class AuthSession(PersistableModel):
         return cls.get(session_id)  # type: ignore[return-value]
 
     @classmethod
-    def create(
-        cls, agent: Optional[VerfierMain], data: Dict[str, Any], agent_id: Optional[str] = None
-    ) -> "AuthSession":
+    def create(cls, agent: Optional[AgentType], data: Dict[str, Any], agent_id: Optional[str] = None) -> "AuthSession":
         session = AuthSession.empty()  # type: ignore[return-value]
         # Use provided agent_id if agent is None (for unenrolled agents)
-        session.initialise(agent.agent_id if agent else agent_id)  # type: ignore[attr-defined]
+        session.initialise(agent.agent_id if agent else agent_id)  # type: ignore[attr-defined,union-attr]
         session.receive_capabilities(data, agent)  # type: ignore[attr-defined]
         return session  # type: ignore[return-value]
 
@@ -306,7 +311,7 @@ class AuthSession(PersistableModel):
 
     @classmethod
     def create_from_memory(
-        cls, session_data: Dict[str, Any], agent: VerfierMain, pop_request: Dict[str, Any]
+        cls, session_data: Dict[str, Any], agent: AgentType, pop_request: Dict[str, Any]
     ) -> "AuthSession":
         """Create an AuthSession from memory data and verify PoP.
 
@@ -534,7 +539,7 @@ class AuthSession(PersistableModel):
         if "active" not in self.values:
             self.active = False
 
-    def receive_capabilities(self, data: Dict[str, Any], agent: Optional[VerfierMain]) -> None:
+    def receive_capabilities(self, data: Dict[str, Any], agent: Optional[AgentType]) -> None:
         if self.nonce:  # type: ignore[attr-defined]
             raise ValueError("AuthSession object cannot be updated as it has already received agent capabilities")
 
@@ -564,14 +569,14 @@ class AuthSession(PersistableModel):
 
         self._set_timestamps()  # type: ignore[no-untyped-call]
 
-    def receive_pop(self, agent: VerfierMain, data: Dict[str, Any]) -> None:
-        if not agent or not agent.agent_id == self.agent_id:  # type: ignore[attr-defined]
+    def receive_pop(self, agent: AgentType, data: Dict[str, Any]) -> None:
+        if not agent or not agent.agent_id == self.agent_id:  # type: ignore[attr-defined,union-attr]
             return
 
         # Set pop_received_at timestamp at the start (required in response even on failure)
         self.pop_received_at = Timestamp.now()
 
-        raw_ak_tpm: Any = agent.ak_tpm
+        raw_ak_tpm: Any = agent.ak_tpm  # type: ignore[union-attr]
         ak_tpm: bytes = raw_ak_tpm if isinstance(raw_ak_tpm, bytes) else (raw_ak_tpm.encode() if raw_ak_tpm else b"")
 
         # Extract proof from authentication_provided array according to spec
