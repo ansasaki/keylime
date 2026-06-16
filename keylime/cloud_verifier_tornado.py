@@ -180,7 +180,6 @@ def _complete_deletion_if_terminated(agent_id: str) -> None:
         logger.exception("SQLAlchemy Error completing deletion for agent %s", agent_id)
 
 
-
 class BaseHandler(tornado.web.RequestHandler):
     def __init__(self, *args, **kwargs):  # type: ignore[no-untyped-def]
         self._req_handler_override = kwargs.get("override")
