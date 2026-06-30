@@ -46,7 +46,7 @@ class VerfierMain(Base):
     learned_ima_keyrings = Column(JSONPickleType(pickler=JSONPickler))
     supported_version = Column(String(20))
     ak_tpm = Column(String(500))
-    mtls_cert = Column(String(2048), nullable=True)
+    mtls_cert = Column(Text().with_variant(Text(429400000), "mysql"), nullable=True)
     attestation_count = Column(Integer)
     last_received_quote = Column(Integer)
     last_successful_attestation = Column(Integer)
