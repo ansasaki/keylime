@@ -56,7 +56,7 @@ class VerifierAgent(PersistableModel):
 
         cls._field("v", String(45), nullable=True)
         cls._field("public_key", String(500), nullable=True)
-        # cls._field("mtls_cert", Certificate, nullable=True)
+        cls._field("mtls_cert", OneOf(Certificate, "disabled"), nullable=True)
         cls._field("ip", String(15), nullable=True)
         cls._field("port", Integer, nullable=True)
         cls._field("verifier_id", String(80), nullable=True)
