@@ -334,7 +334,6 @@ class PersistableModel(BasicModel, metaclass=PersistableModelMeta):
 
             if not association:
                 self.change(name, value)
-                setattr(self._db_mapping_inst, name, value)
                 continue
 
             if process_associations:
@@ -343,6 +342,9 @@ class PersistableModel(BasicModel, metaclass=PersistableModelMeta):
 
                 for item in value:
                     record_set.add(association.other_model(item))
+
+        for name, serialized in self.get_db_changes().items():
+            setattr(self._db_mapping_inst, name, serialized)
 
         self._force_commit_changes()
 
