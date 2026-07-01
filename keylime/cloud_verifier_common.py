@@ -265,12 +265,13 @@ def prepare_get_quote(agent: Dict[str, Any]) -> Dict[str, Union[str, int]]:
 
 def process_get_status(agent: VerfierMain) -> Dict[str, Any]:
     has_mb_policy = 0
-    if agent.mb_policy.mb_policy is not None:
+    if agent.mb_policy is not None and agent.mb_policy.mb_policy is not None:
         has_mb_policy = 1
 
     has_runtime_policy = 0
     if (
-        agent.ima_policy.generator is not None
+        agent.ima_policy is not None
+        and agent.ima_policy.generator is not None
         and agent.ima_policy.generator != ima.RUNTIME_POLICY_GENERATOR.EmptyAllowList
     ):
         has_runtime_policy = 1
