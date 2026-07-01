@@ -85,7 +85,9 @@ class Attestation(PersistableModel):
         if not self.capabilities_received_at and any(item.capabilities for item in self.evidence):
             self.capabilities_received_at = now
 
-        if any(item.chosen_parameters and item.chosen_parameters.changes.get("challenge") for item in self.evidence):
+        if not self.challenges_expire_at and any(
+            item.chosen_parameters and item.chosen_parameters.values.get("challenge") for item in self.evidence
+        ):
             challenge_lifetime = config.getint("verifier", "challenge_lifetime", fallback=1800)
             self.challenges_expire_at = self.capabilities_received_at + timedelta(seconds=challenge_lifetime)
 
@@ -223,6 +225,14 @@ class Attestation(PersistableModel):
         return output
 
     def commit_changes(self, session=None, persist=True):
+        # Ensure challenges_expire_at is set whenever capabilities have been received.
+        # _set_timestamps() sets this via the evidence record-set, but the record-set may be
+        # transiently empty at the time refresh_metadata() is called during process_capabilities().
+        # Enforcing the invariant here guarantees the field is persisted correctly.
+        if not self.challenges_expire_at and self.capabilities_received_at:
+            challenge_lifetime = config.getint("verifier", "challenge_lifetime", fallback=1800)
+            self.challenges_expire_at = self.capabilities_received_at + timedelta(seconds=challenge_lifetime)
+
         # Catch situation where multiple requests to create an attestation are received simultaneously
         if persist and self.stage == "awaiting_evidence":
             last_attestation = Attestation.get_latest(self.agent_id)

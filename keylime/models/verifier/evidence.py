@@ -382,7 +382,7 @@ class CertificationParameters(ChosenParameters):
         # fields can vary by evidence_type (even when the evidence_types belong to the same evidence_class)
 
     def generate_challenge(self, bit_length):
-        self.challenge = Nonce.generate(bit_length)
+        self.change("challenge", Nonce.generate(bit_length))
 
     def render(self, only=None):
         output = super().render(only)

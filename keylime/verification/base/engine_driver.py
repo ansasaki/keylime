@@ -132,6 +132,7 @@ class EngineDriver:
         # TODO: finalise evidence requested
         self.attestation.evidence.clear()  # type: ignore[attr-defined]
         self.attestation.evidence.update(evidence_requested)  # type: ignore[attr-defined]
+        self.attestation.refresh_metadata()  # type: ignore[no-untyped-call]
         self.attestation.validate_parameters()  # type: ignore[no-untyped-call]
 
         return self
