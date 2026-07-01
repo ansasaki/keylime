@@ -463,7 +463,7 @@ class RegistrarAgent(PersistableModel):
         # the case, it is necessary to override commit_changes and make the record_create call on a case-by-case basis.
 
     def render(self, only=None):
-        if not only:
+        if only is None:
             only = ["agent_id", "ek_tpm", "ekcert", "aik_tpm", "mtls_cert", "ip", "port", "regcount"]
 
             if self.virtual:  # pylint: disable=using-constant-test  # ORM defensive programming
