@@ -363,11 +363,12 @@ class PersistableModel(BasicModel, metaclass=PersistableModelMeta):
 
         json_embeds = list(type(self).embeds_one_associations.keys()) + list(type(self).embeds_many_associations.keys())
 
-        for name, value in self.render(json_embeds).items():
-            if isinstance(value, dict):
-                changes[name] = Dictionary().db_dump(value, dialect)
-            elif isinstance(value, list):
-                changes[name] = List().db_dump(value, dialect)
+        if json_embeds:
+            for name, value in self.render(json_embeds).items():
+                if isinstance(value, dict):
+                    changes[name] = Dictionary().db_dump(value, dialect)
+                elif isinstance(value, list):
+                    changes[name] = List().db_dump(value, dialect)
 
         for embed in type(self).embeds_inline_associations.values():
             embed_record_set = embed.get_record_set(self)
