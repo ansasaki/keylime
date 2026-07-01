@@ -571,7 +571,8 @@ class AuthSession(PersistableModel):
         # Set pop_received_at timestamp at the start (required in response even on failure)
         self.pop_received_at = Timestamp.now()
 
-        ak_tpm = base64.b64decode(agent.ak_tpm)  # type: ignore[arg-type]
+        raw_ak_tpm: Any = agent.ak_tpm
+        ak_tpm: bytes = raw_ak_tpm if isinstance(raw_ak_tpm, bytes) else (raw_ak_tpm.encode() if raw_ak_tpm else b"")
 
         # Extract proof from authentication_provided array according to spec
         # Format: data.attributes.authentication_provided[0].data.{message, signature}
