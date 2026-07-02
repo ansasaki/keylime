@@ -397,13 +397,20 @@ class PersistableModel(BasicModel, metaclass=PersistableModelMeta):
                 session.add(self._db_mapping_inst)
             # pylint: enable=redefined-argument-from-local
 
+            # Read back auto-generated primary key values (e.g., autoincrement IDs) from the DB mapping.
+            # After SQLAlchemy flushes, auto-generated values are on the mapping but not in the model's
+            # _committed or _changes dicts. Store them so model.id is available after commit.
+            for pk_name in type(self).primary_key:
+                if pk_name not in self._changes and pk_name not in self._committed:
+                    db_value = getattr(self._db_mapping_inst, pk_name, None)
+                    if db_value is not None:
+                        field = type(self).fields[pk_name]
+                        self._committed[pk_name] = field.data_type.db_load(db_value, db_manager.engine.dialect)
+
             # Changes should be marked as committed only after the entire transaction succeeds, so return early if
             # method was called with a pre-existing session
             if session:
                 return
-
-        # Mark changes as committed, including changes to virtual fields (only if DB query succeeds)
-        super().commit_changes()
 
         # Mark changes to any inline embedded records as committed also
         for embed in type(self).embeds_inline_associations.values():
