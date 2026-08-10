@@ -694,7 +694,7 @@ class AuthSession(PersistableModel):
             self.nonce_created_at = Timestamp.now()
             self.nonce_expires_at = self.nonce_created_at + timedelta(seconds=nonce_lifetime)
 
-        if self.changes.get("ak_attest", "ak_sign"):
+        if self.changes.get("ak_attest") or self.changes.get("ak_sign"):
             self.pop_received_at = Timestamp.now()
 
     def render(self, only: Optional[Sequence[str]] = None) -> Dict[str, Any]:  # type: ignore[override]
