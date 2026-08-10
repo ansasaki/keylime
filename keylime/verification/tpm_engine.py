@@ -648,22 +648,22 @@ class TPMEngine(VerificationEngine):
         if self.previous_authenticated_attestation:
             return
 
-        self.agent.boottime = None
-        self.agent.hash_alg = None
-        self.agent.enc_alg = None
-        self.agent.sign_alg = None
-        self.agent.operational_state = None
-        self.agent.ima_sign_verification_keys = None
-        self.agent.ima_pcrs = None  # This is ignored by Tpm.check_quote()
-        self.agent.pcr10 = None
-        self.agent.next_ima_ml_entry = None
-        self.agent.severity_level = None
-        self.agent.last_event_id = None
-        self.agent.supported_version = "None"
-        self.agent.tpm_clockinfo = None
-        self.agent.tpm_version = None
-        self.agent.last_received_quote = None
-        self.agent.last_successful_attestation = None
+        self.attestation.agent.boottime = None
+        self.attestation.agent.hash_alg = None
+        self.attestation.agent.enc_alg = None
+        self.attestation.agent.sign_alg = None
+        self.attestation.agent.operational_state = None
+        self.attestation.agent.ima_sign_verification_keys = None
+        self.attestation.agent.ima_pcrs = None  # This is ignored by Tpm.check_quote()
+        self.attestation.agent.pcr10 = None
+        self.attestation.agent.next_ima_ml_entry = None
+        self.attestation.agent.severity_level = None
+        self.attestation.agent.last_event_id = None
+        self.attestation.agent.supported_version = "None"
+        self.attestation.agent.tpm_clockinfo = None
+        self.attestation.agent.tpm_version = None
+        self.attestation.agent.last_received_quote = None
+        self.attestation.agent.last_successful_attestation = None
 
     def _extend_auth_token(self) -> None:
         """Extend the authentication token validity on successful attestation.
@@ -793,7 +793,7 @@ class TPMEngine(VerificationEngine):
             # In push mode, allow agent to retry with exponential backoff until token expires
             mode = config.get("verifier", "mode", fallback="pull")
             if mode == "pull":
-                self.agent.accept_attestations = False
+                self.attestation.agent.accept_attestations = False
                 # Invalidate authentication session on attestation failure in pull mode
                 AuthSession.delete_active_session_for_agent(self.agent_id)
             elif agent_util.is_push_mode_agent(self.attestation.agent):
@@ -809,7 +809,7 @@ class TPMEngine(VerificationEngine):
 
         # Only save new learned keyrings if quote was authenticated
         if self.failure_reason != "broken_evidence_chain" and self.attest_state:
-            self.agent.learned_ima_keyrings = self.attest_state.get_ima_keyrings().to_json()
+            self.attestation.agent.learned_ima_keyrings = self.attest_state.get_ima_keyrings().to_json()
 
     def process_capabilities(self, evidence_requested: Any) -> None:
         self._validate_system_info()
