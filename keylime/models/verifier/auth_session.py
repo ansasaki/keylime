@@ -692,7 +692,7 @@ class AuthSession(PersistableModel):
 
         if self.changes.get("nonce"):
             self.nonce_created_at = Timestamp.now()
-            self.nonce_expires_at = self.nonce_created_at + timedelta(nonce_lifetime)
+            self.nonce_expires_at = self.nonce_created_at + timedelta(seconds=nonce_lifetime)
 
         if self.changes.get("ak_attest", "ak_sign"):
             self.pop_received_at = Timestamp.now()
