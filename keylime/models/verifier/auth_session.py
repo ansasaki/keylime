@@ -661,27 +661,29 @@ class AuthSession(PersistableModel):
                 self.signing_scheme = supported_signing_schemes[0]
             return
 
-        # Set hashing algorithm that is first match from the list of hashing supported by the agent tpm
-        # and the list of accpeted hashing algorithm
-        for hash_alg in agent.accept_tpm_hash_algs:
-            if hash_alg in supported_hash_algorithms:
-                self.hash_algorithm = hash_alg
-                break
+        if not supported_hash_algorithms:
+            self._add_error("supported_hash_algorithms", "is required")
+        else:
+            for hash_alg in agent.accept_tpm_hash_algs:
+                if hash_alg in supported_hash_algorithms:
+                    self.hash_algorithm = hash_alg
+                    break
 
-        if not self.hash_algorithm:
+        if not self.hash_algorithm and supported_hash_algorithms:
             self._add_error(
                 "supported_hash_algorithms",
                 f"does not contain any accepted hashing algorithm for agent '{agent.agent_id}'",
             )
 
-        # Set signing algorithm that is first match from the list of signing supported by the agent tpm
-        # and the list of accpeted signing algorithm
-        for signing_scheme in agent.accept_tpm_signing_algs:
-            if signing_scheme in supported_signing_schemes:
-                self.signing_scheme = signing_scheme
-                break
+        if not supported_signing_schemes:
+            self._add_error("supported_signing_schemes", "is required")
+        else:
+            for signing_scheme in agent.accept_tpm_signing_algs:
+                if signing_scheme in supported_signing_schemes:
+                    self.signing_scheme = signing_scheme
+                    break
 
-        if not self.signing_scheme:
+        if not self.signing_scheme and supported_signing_schemes:
             self._add_error(
                 "supported_signing_schemes",
                 f"does not contain any accepeted signing scheme for agent '{agent.agent_id}'",
