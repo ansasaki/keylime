@@ -676,12 +676,11 @@ class TPMEngine(VerificationEngine):
         logger.debug("_extend_auth_token() called for agent '%s'", self.agent_id)
         session_data = AuthSession.get_active_session_for_agent(self.agent_id)
 
-        # Log session data (session_id is the hash - safe to log, but truncate for cleaner output)
         if session_data:
-            logged_data = session_data.copy()
-            # Truncate session_id for cleaner logging (show prefix only)
-            if "session_id" in logged_data:
-                logged_data["session_id"] = logged_data["session_id"][:8] + "..."
+            safe_fields = {"session_id", "agent_id", "active", "token_expires_at", "nonce_expires_at"}
+            logged_data = {
+                k: (v[:8] + "..." if k == "session_id" else v) for k, v in session_data.items() if k in safe_fields
+            }
             logger.debug("get_active_session_for_agent returned: %s", logged_data)
         else:
             logger.debug("get_active_session_for_agent returned: None")
@@ -723,7 +722,10 @@ class TPMEngine(VerificationEngine):
 
             if session_id:
                 logger.debug(
-                    "Extended auth token for agent '%s' (session %s) until %s", self.agent_id, session_id, new_expiry
+                    "Extended auth token for agent '%s' (session %s...) until %s",
+                    self.agent_id,
+                    session_id[:8] if session_id else "",
+                    new_expiry,
                 )
 
     def _process_results(self, failure: Any) -> None:
