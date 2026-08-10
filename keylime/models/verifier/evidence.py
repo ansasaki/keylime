@@ -205,7 +205,7 @@ class Capabilities(PersistableModel):
             if self.component_version:
                 only.append("component_version")
 
-            if self.component_version:
+            if self.evidence_version:
                 only.append("evidence_version")
 
             if self.meta:
