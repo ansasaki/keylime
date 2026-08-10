@@ -115,7 +115,8 @@ class FlatDictView:
             del self._store[flat_key]
 
     def __contains__(self, key: Any) -> bool:
-        return self._make_key(key) in self._store
+        with self._lock:
+            return self._make_key(key) in self._store
 
     def get(self, key: Any, default: Any = None) -> Any:
         with self._lock:
