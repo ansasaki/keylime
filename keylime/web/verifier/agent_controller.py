@@ -375,17 +375,18 @@ def _delete_agent_v3(agent: VerifierAgentModel, agent_id: str) -> None:
 def _cleanup_agent_named_policies(agent_id: str, session: Any = None) -> None:
     """Remove policies named after the agent if no other agents reference them.
 
-    When session is provided, deletes run within the caller's transaction.
+    All queries use the caller's session so the reference check sees the
+    agent deletion that already happened in the same transaction.
     """
-    ima = IMAPolicy.get(name=agent_id)
+    ima = IMAPolicy.get(name=agent_id, session_=session)
     if ima:
-        refs = VerifierAgentModel.all_ids(ima_policy_id=ima.id)  # type: ignore[no-untyped-call, attr-defined]
+        refs = VerifierAgentModel.all_ids(ima_policy_id=ima.id, session_=session)  # type: ignore[no-untyped-call, attr-defined]
         if not refs:
             ima.delete(session=session)  # type: ignore[no-untyped-call]
 
-    mb = MBPolicy.get(name=agent_id)
+    mb = MBPolicy.get(name=agent_id, session_=session)
     if mb:
-        refs = VerifierAgentModel.all_ids(mb_policy_id=mb.id)  # type: ignore[no-untyped-call, attr-defined]
+        refs = VerifierAgentModel.all_ids(mb_policy_id=mb.id, session_=session)  # type: ignore[no-untyped-call, attr-defined]
         if not refs:
             mb.delete(session=session)  # type: ignore[no-untyped-call]
 
