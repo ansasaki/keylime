@@ -189,6 +189,8 @@ class PersistableModel(BasicModel, metaclass=PersistableModelMeta):
         if cls.schema_awaiting_processing:
             cls.process_schema()
 
+        session = kwargs.pop("session_", None)
+
         if args and not isinstance(args[0], ClauseElement):
             if not cls.id_field:
                 raise QueryInvalid(f"model '{cls.__name__}' does not have a field which is used as an ID")
@@ -196,7 +198,7 @@ class PersistableModel(BasicModel, metaclass=PersistableModelMeta):
             kwargs[cls.id_field.name] = args[0]
             args = args[1:]
 
-        with db_manager.session_context() as session:
+        with db_manager.session_context(session) as session:
             results = cls._query(session, args, kwargs).first()
 
         if results:
@@ -219,12 +221,14 @@ class PersistableModel(BasicModel, metaclass=PersistableModelMeta):
         if cls.schema_awaiting_processing:
             cls.process_schema()
 
+        session = kwargs.pop("session_", None)
+
         if not cls.id_field:
             raise QueryInvalid(f"model '{cls.__name__}' does not have a field which is used as an ID")
 
         id_column = cls.db_table.columns[cls.id_field.name]
 
-        with db_manager.session_context() as session:
+        with db_manager.session_context(session) as session:
             results = cls._query(session, args, kwargs, subject=id_column).all()
 
         return [getattr(row, cls.id_field.name) for row in results]
