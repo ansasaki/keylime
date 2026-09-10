@@ -109,7 +109,7 @@ class APIResource(APILinksMixin, APIMetaMixin):
         if not APIMessageHelpers.is_valid_name(name):
             raise InvalidMember("attribute name added to JSON:API resource is not valid")
 
-        if not isinstance(value, (dict, list, tuple, str, int, float, bool)):
+        if value is not None and not isinstance(value, (dict, list, tuple, str, int, float, bool)):
             raise InvalidMember("attribute value added to JSON:API resource is not serialisable to JSON")
 
         if name in self._attributes:
