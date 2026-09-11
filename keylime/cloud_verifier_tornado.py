@@ -2715,7 +2715,6 @@ def main() -> None:
     # set a conservative general umask
     os.umask(0o077)
 
-    VerfierMain.metadata.create_all(engine, checkfirst=True)  # pyright: ignore
     with session_context() as session:
         try:
             quote_interval = config.getfloat("verifier", "quote_interval", fallback=2.0)
