@@ -361,13 +361,11 @@ def _delete_agent_v3(agent: VerifierAgentModel, agent_id: str) -> None:
     AgentAttestStates.get_instance().delete_by_agent_id(agent_id)
 
     # pylint: disable=import-outside-toplevel
-    from keylime.db.verifier_db import VerifierAttestations
     from keylime.models.base import db_manager
 
     with db_manager.session_context() as session:
         EvidenceItem.delete_all(agent_id=agent_id, session_=session)
         Attestation.delete_all(agent_id=agent_id, session_=session)
-        session.query(VerifierAttestations).filter_by(agent_id=agent_id).delete()
         agent.delete(session=session, include_dependants=False)  # type: ignore[no-untyped-call]
         _cleanup_agent_named_policies(agent_id, session=session)
 

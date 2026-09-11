@@ -20,7 +20,7 @@ from keylime.agentstates import AgentAttestState, AgentAttestStates
 from keylime.config import DEFAULT_TIMEOUT
 from keylime.da import record
 from keylime.db.keylime_db import SessionManager, make_engine
-from keylime.db.verifier_db import VerfierMain, VerifierAllowlist, VerifierAttestations, VerifierMbpolicy
+from keylime.db.verifier_db import VerfierMain, VerifierAllowlist, VerifierMbpolicy
 from keylime.failure import set_severity_config
 from keylime.models.verifier import Attestation, EvidenceItem
 from keylime.shared_data import (
@@ -229,21 +229,16 @@ def verifier_db_delete_agent(session: Session, agent_id: str) -> None:
 
     get_AgentAttestStates().delete_by_agent_id(agent_id)
     # Delete in FK dependency order:
-    # Push-mode tables:
     #   1. evidence_items (FK to attestations)
     #   2. attestations (FK to agent)
-    # Legacy/shared tables:
-    #   3. VerifierAttestations (legacy attestations table, FK to agent)
-    # Agent and policies:
-    #   4. agent
-    #   5. allowlists/mbpolicies (by name, not FK)
+    #   3. agent
+    #   4. allowlists/mbpolicies (by name, not FK)
     # NOTE: Authentication sessions are NOT deleted when an agent is removed.
     # This allows agents to maintain their authentication tokens through policy
     # updates (DELETE + POST) and re-enrollment without needing to re-authenticate.
     # Sessions will expire naturally based on their token_expires_at timestamp.
     EvidenceItem.delete_all(agent_id=agent_id, session_=session)
     Attestation.delete_all(agent_id=agent_id, session_=session)
-    session.query(VerifierAttestations).filter_by(agent_id=agent_id).delete()
     session.query(VerfierMain).filter_by(agent_id=agent_id).delete()
     session.query(VerifierAllowlist).filter_by(name=agent_id).delete()
     session.query(VerifierMbpolicy).filter_by(name=agent_id).delete()
