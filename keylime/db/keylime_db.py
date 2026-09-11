@@ -15,12 +15,14 @@ from keylime import config, keylime_logging
 logger = keylime_logging.init_logging("keylime_db")
 
 
-# make sure referential integrity is working for SQLite
+# Configure SQLite for multi-process safety and referential integrity
 @event.listens_for(Engine, "connect")  # type: ignore
 def _set_sqlite_pragma(dbapi_connection: SQLite3Connection, _: Any) -> None:
     if isinstance(dbapi_connection, SQLite3Connection):
         cursor = dbapi_connection.cursor()
         cursor.execute("PRAGMA foreign_keys=ON")
+        cursor.execute("PRAGMA journal_mode=WAL")
+        cursor.execute("PRAGMA busy_timeout=5000")
         cursor.close()
 
 
