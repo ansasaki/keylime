@@ -4,7 +4,7 @@ from typing import Any, Dict, Optional, cast
 
 from sqlalchemy.exc import IntegrityError
 
-from keylime import cloud_verifier_common, config, keylime_logging, push_agent_monitor, web_util
+from keylime import agent_util, cloud_verifier_common, config, keylime_logging, push_agent_monitor, web_util
 from keylime.agentstates import AgentAttestStates
 from keylime.common import states, validators
 from keylime.models.verifier import Attestation, EvidenceItem, IMAPolicy, MBPolicy
@@ -499,7 +499,38 @@ def _render_agent_summary(agent: Any) -> Dict[str, Any]:
     return {k: v for k, v in rendered.items() if v is not None}
 
 
+def _compute_attestation_status(agent: Any) -> str:
+    """Compute the attestation status for an agent based on its current state."""
+    if agent_util.is_push_mode_agent(agent):
+        if hasattr(agent, "accept_attestations") and agent.accept_attestations is False:
+            consecutive_failures = getattr(agent, "consecutive_attestation_failures", None)
+            if consecutive_failures is not None and consecutive_failures > 0:
+                return "FAIL"
+            return "TIMEOUT"
+        if hasattr(agent, "accept_attestations") and agent.accept_attestations is True:
+            consecutive_failures = getattr(agent, "consecutive_attestation_failures", None)
+            if consecutive_failures is not None and consecutive_failures > 0:
+                return "FAIL"
+            attestation_count_value = getattr(agent, "attestation_count", None)
+            if attestation_count_value is not None and attestation_count_value > 0:
+                return "PASS"
+            return "PENDING"
+        return "PENDING"
+
+    if agent.operational_state in (
+        states.GET_QUOTE,
+        states.GET_QUOTE_RETRY,
+        states.PROVIDE_V,
+        states.PROVIDE_V_RETRY,
+    ):
+        return "PASS"
+    if agent.operational_state in (states.FAILED, states.INVALID_QUOTE, states.TENANT_FAILED):
+        return "FAIL"
+    return "PENDING"
+
+
 def _render_agent_attrs(agent: Any) -> Dict[str, Any]:
     """Render agent detail attributes for JSON:API response, excluding None values."""
     rendered = agent.render(only=_AGENT_DETAIL_FIELDS)
+    rendered["attestation_status"] = _compute_attestation_status(agent)
     return {k: v for k, v in rendered.items() if v is not None}
