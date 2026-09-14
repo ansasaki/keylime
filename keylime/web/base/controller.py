@@ -247,6 +247,7 @@ class Controller:
         self._json_params: Optional[JSONObjectConvertible] = None
         self._major_version: Optional[int] = None
         self._minor_version: Optional[int] = None
+        self._version_parsed: bool = False
 
     def _infer_response_code(self) -> int:
         if self.request_method != "POST":
@@ -612,21 +613,31 @@ class Controller:
         """
         return self.get_params(ignore_errors=True)
 
+    def _parse_version(self) -> None:
+        """Parses both major and minor API version from the request path."""
+        if self._version_parsed:
+            return
+
+        result = Controller.VERSION_REGEX.match(self.path)
+
+        try:
+            self._major_version = int(result.group(1)) if result else None
+        except (TypeError, ValueError):
+            self._major_version = None
+
+        try:
+            self._minor_version = int(result.group(2)) if result else None
+        except (TypeError, ValueError):
+            self._minor_version = None
+
+        self._version_parsed = True
+
     @property
     def major_version(self) -> Optional[int]:
         """Extracts the major API version from the path, if present. E.g., if the path being handled starts with
         "/v2.0", "/v2.5" or "/v2", this method will return ``2``.
         """
-        if not self._major_version:
-            result = Controller.VERSION_REGEX.match(self.path)
-
-            try:
-                major_version = int(result.group(1)) if result else None
-            except (TypeError, ValueError):
-                major_version = None
-
-            self._major_version = major_version
-
+        self._parse_version()
         return self._major_version
 
     @property
@@ -634,22 +645,13 @@ class Controller:
         """Extracts the minor API version from the path, if present. E.g., if the path being handled starts with
         "/v2.0", this method will return ``0``. If the path starts with "/v2" instead, the method will return ``None``.
         """
-        if not self._major_version:
-            result = Controller.VERSION_REGEX.match(self.path)
-
-            try:
-                minor_version = int(result.group(2)) if result else None
-            except (TypeError, ValueError):
-                minor_version = None
-
-            self._minor_version = minor_version
-
+        self._parse_version()
         return self._minor_version
 
     @property
     def version(self) -> Optional[str]:
-        if self.major_version and self.minor_version:
+        if self.major_version is not None and self.minor_version is not None:
             return f"{self.major_version}.{self.minor_version}"
-        if self.major_version:
+        if self.major_version is not None:
             return str(self.major_version)
         return None
