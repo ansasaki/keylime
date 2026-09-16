@@ -1,5 +1,5 @@
-from keylime import api_version, config
-from keylime.web.base import Controller
+from keylime import api_version, cloud_verifier_common, config
+from keylime.web.base import APIResource, Controller
 
 
 class ServerInfoController(Controller):
@@ -34,12 +34,22 @@ class ServerInfoController(Controller):
 
     def show_version_root(self, **_params):
         """A request issued for the top-level path of a given API version results in a 200 response when the server
-        supports that version.
+        supports that version. For API v3+, the response includes a JSON:API document with server metadata.
         """
-        if self.major_version and self.major_version <= 2:
+        if self.major_version == 2:
             self._new_v2_main_handler().get()  # type: ignore[no-untyped-call]
         else:
-            self.send_response(code=200)
+            APIResource(
+                "verifier",
+                config.get("verifier", "uuid", fallback=cloud_verifier_common.DEFAULT_VERIFIER_ID),
+                {
+                    "mode": config.get("verifier", "mode", fallback="pull") or "pull",
+                    "supported_versions": api_version.all_versions(),
+                    "require_allow_list_signatures": config.getboolean(
+                        "verifier", "require_allow_list_signatures", fallback=False
+                    ),
+                },
+            ).send_via(self)
 
     # GET /version[s]
     def show_versions(self, **_params):
