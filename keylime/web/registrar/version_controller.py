@@ -1,6 +1,6 @@
 from keylime import api_version as keylime_api_version
 from keylime import keylime_logging
-from keylime.web.base import Controller
+from keylime.web.base import APIResource, Controller
 
 logger = keylime_logging.init_logging("registrar")
 
@@ -16,5 +16,10 @@ class VersionController(Controller):
 
     # GET /v3[.0]/
     def show_version_root(self, **_params):
-        """A request to the top-level path of a given API version returns 200 when supported."""
-        self.send_response(code=200)
+        """A request to the top-level path of a given API version returns 200 when supported,
+        along with a JSON:API document containing registrar metadata.
+        """
+        APIResource(
+            "registrar",
+            {"supported_versions": keylime_api_version.all_versions()},
+        ).send_via(self)

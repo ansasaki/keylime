@@ -8,6 +8,7 @@ import unittest
 from typing import Any, cast
 from unittest.mock import MagicMock, patch
 
+from keylime import api_version
 from keylime.web.verifier.server_info_controller import ServerInfoController
 
 
@@ -51,16 +52,67 @@ class TestServerInfoControllerShowVersionRoot(unittest.TestCase):
 
     def setUp(self):
         self.controller = _make_controller()
-        self.controller.respond = MagicMock()
 
-    def test_show_version_root_v3_returns_200(self):
-        """Test that v3+ version root returns 200."""
+    @patch("keylime.web.verifier.server_info_controller.APIResource")
+    @patch("keylime.web.verifier.server_info_controller.config")
+    @patch("keylime.web.verifier.server_info_controller.cloud_verifier_common")
+    def test_show_version_root_v3_returns_jsonapi_document(self, mock_cvc, mock_config, mock_api_resource):
+        """Test that v3+ version root returns a JSON:API document with verifier metadata."""
         self.controller.action_handler.request.path = "/v3.0/"
-        self.controller.send_response = MagicMock()
+        mock_cvc.DEFAULT_VERIFIER_ID = "default"
+        mock_config.get.side_effect = lambda section, key, fallback=None: {
+            ("verifier", "uuid"): "my-verifier-uuid",
+            ("verifier", "mode"): "push",
+        }.get((section, key), fallback)
+        mock_config.getboolean.return_value = False
+        mock_resource = MagicMock()
+        mock_api_resource.return_value = mock_resource
 
         self.controller.show_version_root()
 
-        self.controller.send_response.assert_called_once_with(code=200)
+        mock_api_resource.assert_called_once_with(
+            "verifier",
+            "my-verifier-uuid",
+            {
+                "mode": "push",
+                "supported_versions": api_version.all_versions(),
+                "require_allow_list_signatures": False,
+            },
+        )
+        mock_resource.send_via.assert_called_once_with(self.controller)
+
+    @patch("keylime.web.verifier.server_info_controller.APIResource")
+    @patch("keylime.web.verifier.server_info_controller.config")
+    @patch("keylime.web.verifier.server_info_controller.cloud_verifier_common")
+    def test_show_version_root_v3_mode_defaults_to_pull_when_empty(self, mock_cvc, mock_config, mock_api_resource):
+        """Test that an empty mode config value is normalised to 'pull'."""
+        self.controller.action_handler.request.path = "/v3.0/"
+        mock_cvc.DEFAULT_VERIFIER_ID = "default"
+        mock_config.get.side_effect = lambda section, key, fallback=None: {
+            ("verifier", "uuid"): "default",
+            ("verifier", "mode"): "",
+        }.get((section, key), fallback)
+        mock_config.getboolean.return_value = False
+        mock_resource = MagicMock()
+        mock_api_resource.return_value = mock_resource
+
+        self.controller.show_version_root()
+
+        _, _, attrs = mock_api_resource.call_args[0]
+        self.assertEqual(attrs["mode"], "pull")
+
+    def test_show_version_root_v2_delegates_to_v2_handler(self):
+        """Test that v2 version root delegates to the legacy v2 MainHandler."""
+        self.controller.action_handler.request.path = "/v2.1/"
+        mock_v2_handler = MagicMock()
+        # pylint: disable-next=protected-access
+        self.controller._new_v2_main_handler = MagicMock(return_value=mock_v2_handler)  # type: ignore[method-assign]
+
+        self.controller.show_version_root()
+
+        # pylint: disable-next=protected-access
+        self.controller._new_v2_main_handler.assert_called_once()
+        mock_v2_handler.get.assert_called_once()
 
 
 class TestServerInfoControllerShowVersions(unittest.TestCase):
