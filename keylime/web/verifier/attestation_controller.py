@@ -2,7 +2,7 @@
 # Uses ORM models with dynamically-created attributes from metaclasses
 
 from keylime import agent_util, config, keylime_logging
-from keylime.common import retry
+from keylime.common import retry, states
 from keylime.models.verifier import Attestation, VerifierAgent
 from keylime.verification import EngineDriver
 from keylime.web.base import APIError, APILink, APIMessageBody, APIMeta, APIResource, Controller
@@ -159,7 +159,7 @@ class AttestationController(Controller):
     def index(self, agent_id, **_params):  # type: ignore[no-untyped-def]
         agent = VerifierAgent.get(agent_id)
 
-        if not agent:
+        if not agent or agent.operational_state == states.TERMINATED:
             APIError("not_found", f"No enrolled agent with ID '{agent_id}'.").send_via(self)
 
         results = Attestation.all(agent_id=agent_id)
@@ -186,7 +186,7 @@ class AttestationController(Controller):
         agent = VerifierAgent.get(agent_id)
         attestation = Attestation.get(agent_id=agent_id, index=index)
 
-        if not agent:
+        if not agent or agent.operational_state == states.TERMINATED:
             APIError("not_found", f"No enrolled agent with ID '{agent_id}'.").send_via(self)
 
         if not attestation:
@@ -202,7 +202,7 @@ class AttestationController(Controller):
     def show_latest(self, agent_id, **_params):  # type: ignore[no-untyped-def]
         agent = VerifierAgent.get(agent_id)
 
-        if not agent:
+        if not agent or agent.operational_state == states.TERMINATED:
             APIError("not_found", f"No enrolled agent with ID '{agent_id}'.").send_via(self)
 
         latest = agent.latest_attestation  # type: ignore[union-attr]
@@ -217,7 +217,7 @@ class AttestationController(Controller):
     def create(self, agent_id, attestation, **params):  # type: ignore[no-untyped-def]  # pylint: disable=unused-argument
         agent = VerifierAgent.get(agent_id)
 
-        if not agent:
+        if not agent or agent.operational_state == states.TERMINATED:
             APIError("not_found", f"No enrolled agent with ID '{agent_id}'.").send_via(self)
 
         # Check if attestations are disabled
@@ -315,7 +315,7 @@ class AttestationController(Controller):
 
         agent = VerifierAgent.get(agent_id)
 
-        if not agent:
+        if not agent or agent.operational_state == states.TERMINATED:
             APIError("not_found", f"No enrolled agent with ID '{agent_id}'.").send_via(self)
 
         latest = agent.latest_attestation  # type: ignore[union-attr]
@@ -375,7 +375,7 @@ class AttestationController(Controller):
     def update_latest(self, agent_id, **params):  # type: ignore[no-untyped-def]
         agent = VerifierAgent.get(agent_id)
 
-        if not agent:
+        if not agent or agent.operational_state == states.TERMINATED:
             APIError("not_found", f"No enrolled agent with ID '{agent_id}'.").send_via(self)
 
         latest = agent.latest_attestation  # type: ignore[union-attr]

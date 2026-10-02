@@ -3,6 +3,7 @@ from typing import Any, Dict, Optional
 from sqlalchemy.exc import IntegrityError
 
 from keylime import keylime_logging
+from keylime.common import states
 from keylime.mba import mba
 from keylime.models.verifier import MBPolicy, VerifierAgent
 from keylime.shared_data import get_shared_memory
@@ -154,7 +155,12 @@ class MBRefStateController(Controller):
         if not policy:
             APIError("not_found", f"No MB ref state with name '{name}'.").send_via(self)
             return
-        if VerifierAgent.all_ids(mb_policy_id=policy.id):  # type: ignore[attr-defined]
+        active_refs = [
+            a
+            for a in VerifierAgent.all(mb_policy_id=policy.id)  # type: ignore[attr-defined]
+            if a.operational_state != states.TERMINATED  # type: ignore[attr-defined]
+        ]
+        if active_refs:
             APIError("conflict", f"MB ref state '{name}' is referenced by one or more agents.").send_via(self)
             return
         try:

@@ -89,6 +89,7 @@ class AgentController(Controller):
             .include(APILink("self", f"/v{self.version}/agents/{agent.agent_id}"))  # type: ignore[attr-defined]
             .render()  # type: ignore[no-untyped-call]
             for agent in agents
+            if agent.operational_state != states.TERMINATED  # type: ignore[attr-defined]
         ]
 
         self.send_response(200, None, {"data": data}, "application/vnd.api+json")
@@ -100,10 +101,9 @@ class AgentController(Controller):
             )
 
         agent = VerifierAgentModel.get(agent_id)
-        if not agent:
+        if not agent or agent.operational_state == states.TERMINATED:  # type: ignore[attr-defined]
             APIError("not_found", f"Agent '{agent_id}' not found.").send_via(self)
-
-        assert agent is not None
+            return
 
         APIResource(
             "agent",
@@ -162,9 +162,15 @@ class AgentController(Controller):
             # Check for duplicate agent
             existing = VerifierAgentModel.get(agent_id)
             if existing:
-                APIError("conflict").set_detail(  # type: ignore[no-untyped-call]
-                    f"Agent '{agent_id}' already exists. Use DELETE then POST to re-enroll."
-                ).send_via(self)
+                if existing.operational_state == states.TERMINATED:  # type: ignore[attr-defined]
+                    # TERMINATED agents are logically deleted (tombstone).
+                    # Clean up the old row so re-enrollment can proceed.
+                    clear_agent_policy_cache(agent_id)
+                    _delete_agent_v3(existing, agent_id)
+                else:
+                    APIError("conflict").set_detail(  # type: ignore[no-untyped-call]
+                        f"Agent '{agent_id}' already exists. Use DELETE then POST to re-enroll."
+                    ).send_via(self)
 
             # Resolve IMA policy
             runtime_policy_name = agent.get("runtime_policy_name")

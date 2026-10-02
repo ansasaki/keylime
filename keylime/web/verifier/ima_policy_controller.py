@@ -4,6 +4,7 @@ from typing import Any, Dict, Optional
 from sqlalchemy.exc import IntegrityError
 
 from keylime import config, keylime_logging, signing
+from keylime.common import states
 from keylime.ima import ima
 from keylime.models.verifier import IMAPolicy, VerifierAgent
 from keylime.shared_data import get_shared_memory
@@ -195,7 +196,12 @@ class IMAPolicyController(Controller):
         if not policy:
             APIError("not_found", f"No IMA policy with name '{name}'.").send_via(self)
             return
-        if VerifierAgent.all_ids(ima_policy_id=policy.id):  # type: ignore[attr-defined]
+        active_refs = [
+            a
+            for a in VerifierAgent.all(ima_policy_id=policy.id)  # type: ignore[attr-defined]
+            if a.operational_state != states.TERMINATED  # type: ignore[attr-defined]
+        ]
+        if active_refs:
             APIError("conflict", f"Policy '{name}' is referenced by one or more agents.").send_via(self)
             return
         try:
