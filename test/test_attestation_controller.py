@@ -8,6 +8,7 @@ import unittest
 from typing import cast
 from unittest.mock import Mock, patch
 
+from keylime.common import states
 from keylime.models.verifier.verifier_agent import VerifierAgent
 from keylime.web.base.exceptions import StopAction
 from keylime.web.verifier.attestation_controller import AttestationController
@@ -67,6 +68,7 @@ class TestAttestationControllerParameterHandling(unittest.TestCase):
         """
         # Setup mock agent and attestation
         mock_agent = Mock(spec=VerifierAgent)
+        mock_agent.operational_state = states.GET_QUOTE
         mock_attestation = Mock()
         mock_attestation.index = self.attestation_index
         mock_attestation.stage = "awaiting_evidence"
@@ -116,6 +118,7 @@ class TestAttestationControllerParameterHandling(unittest.TestCase):
         """
         # Setup mock agent
         mock_agent = Mock(spec=VerifierAgent)
+        mock_agent.operational_state = states.GET_QUOTE
         mock_attestation = Mock()
         mock_attestation.index = self.attestation_index
         mock_attestation.stage = "awaiting_evidence"
@@ -182,6 +185,7 @@ class TestAttestationControllerParameterHandling(unittest.TestCase):
         """
         # Setup mock agent and attestation
         mock_agent = Mock(spec=VerifierAgent)
+        mock_agent.operational_state = states.GET_QUOTE
         mock_attestation = Mock()
         mock_attestation.index = self.attestation_index
         mock_attestation.stage = "awaiting_evidence"
@@ -223,6 +227,7 @@ class TestAttestationControllerParameterHandling(unittest.TestCase):
         """Test update_latest() when agent has no latest attestation"""
         # Setup mock agent without attestation
         mock_agent = Mock(spec=VerifierAgent)
+        mock_agent.operational_state = states.GET_QUOTE
         mock_agent.latest_attestation = None
         mock_agent_class.get.return_value = mock_agent
 
@@ -283,6 +288,7 @@ class TestAttestationControllerErrorMessages(unittest.TestCase):
         """
         # Setup mock agent
         mock_agent = Mock(spec=VerifierAgent)
+        mock_agent.operational_state = states.GET_QUOTE
         mock_attestation = Mock()
         mock_attestation.index = self.attestation_index
         mock_attestation.stage = "awaiting_evidence"
@@ -356,6 +362,7 @@ class TestAttestationControllerExponentialBackoff(unittest.TestCase):
         """
         # Setup mock agent with failed latest attestation
         mock_agent = Mock(spec=VerifierAgent)
+        mock_agent.operational_state = states.GET_QUOTE
         mock_agent.accept_attestations = True
         mock_agent.consecutive_attestation_failures = 2
         # Configure as PULL mode agent (has operational_state, ip, and port)
@@ -410,6 +417,7 @@ class TestAttestationControllerExponentialBackoff(unittest.TestCase):
         """
         # Setup mock agent with multiple consecutive failures
         mock_agent = Mock(spec=VerifierAgent)
+        mock_agent.operational_state = states.GET_QUOTE
         mock_agent.accept_attestations = True
         mock_agent.consecutive_attestation_failures = 5
         # Configure as PULL mode agent (has operational_state, ip, and port)
@@ -463,6 +471,7 @@ class TestAttestationControllerExponentialBackoff(unittest.TestCase):
         """
         # Setup mock agent with many consecutive failures
         mock_agent = Mock(spec=VerifierAgent)
+        mock_agent.operational_state = states.GET_QUOTE
         mock_agent.accept_attestations = True
         mock_agent.consecutive_attestation_failures = 10
         # Configure as PULL mode agent (has operational_state, ip, and port)
@@ -513,6 +522,7 @@ class TestAttestationControllerExponentialBackoff(unittest.TestCase):
         """
         # Setup mock agent with passing attestation
         mock_agent = Mock(spec=VerifierAgent)
+        mock_agent.operational_state = states.GET_QUOTE
         mock_agent.accept_attestations = True
         mock_agent.consecutive_attestation_failures = 0
 
@@ -575,6 +585,7 @@ class TestAttestationRecovery(unittest.TestCase):
         """PUSH mode agents should be allowed to attest even when accept_attestations=False"""
         # Create a PUSH mode agent with attestations disabled (simulating timeout)
         mock_agent = Mock(spec=VerifierAgent)
+        mock_agent.operational_state = states.GET_QUOTE
         mock_agent.agent_id = "test-push-agent"
         mock_agent.accept_attestations = False  # Disabled due to timeout
         mock_agent.ip = None  # PUSH mode
@@ -617,6 +628,7 @@ class TestAttestationRecovery(unittest.TestCase):
         """PULL mode agents should be rejected when accept_attestations=False"""
         # Create a PULL mode agent with attestations disabled
         mock_agent = Mock(spec=VerifierAgent)
+        mock_agent.operational_state = states.GET_QUOTE
         mock_agent.agent_id = "test-pull-agent"
         mock_agent.accept_attestations = False  # Disabled due to failure
         mock_agent.ip = "127.0.0.1"  # PULL mode
@@ -668,6 +680,7 @@ class TestAttestationControllerGetMethods(unittest.TestCase):
         """
         # Setup mock agent with attestations
         mock_agent = Mock(spec=VerifierAgent)
+        mock_agent.operational_state = states.GET_QUOTE
         mock_agent_class.get.return_value = mock_agent
 
         # Mock Attestation.all to return some attestations
@@ -706,6 +719,7 @@ class TestAttestationControllerGetMethods(unittest.TestCase):
         """
         # Setup mock agent with no attestations
         mock_agent = Mock(spec=VerifierAgent)
+        mock_agent.operational_state = states.GET_QUOTE
         mock_agent_class.get.return_value = mock_agent
 
         # Mock Attestation.all to return empty list (no attestations)
@@ -740,6 +754,7 @@ class TestAttestationControllerGetMethods(unittest.TestCase):
         """
         # Setup mock agent and attestation
         mock_agent = Mock(spec=VerifierAgent)
+        mock_agent.operational_state = states.GET_QUOTE
         mock_attestation = Mock()
         mock_attestation.render_state = Mock(return_value={})
         mock_agent_class.get.return_value = mock_agent
@@ -771,6 +786,7 @@ class TestAttestationControllerGetMethods(unittest.TestCase):
         """
         # Setup mock agent with latest attestation
         mock_agent = Mock(spec=VerifierAgent)
+        mock_agent.operational_state = states.GET_QUOTE
         mock_attestation = Mock()
         mock_attestation.index = 5
         mock_attestation.render_state = Mock(return_value={})

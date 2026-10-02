@@ -383,6 +383,14 @@ class AgentsHandler(BaseHandler):
                             agent_id,
                         )
                         return
+                    # Tombstone: TERMINATED agents are logically deleted.
+                    if agent.operational_state == states.TERMINATED:  # pyright: ignore
+                        web_util.echo_json_response(self.req_handler, 404, "agent id not found")
+                        logger.info(
+                            "GET returning 404 response. agent %s is TERMINATED (pending deletion).",
+                            agent_id,
+                        )
+                        return
                     response = cloud_verifier_common.process_get_status(agent)
                     web_util.echo_json_response(self.req_handler, 200, "Success", response)
                 else:
@@ -437,16 +445,29 @@ class AgentsHandler(BaseHandler):
                                 aid,
                             )
                             continue
+                        if agent.operational_state == states.TERMINATED:  # pyright: ignore
+                            logger.debug(
+                                "Agent %s is TERMINATED (pending deletion), skipping in bulk GET.",
+                                aid,
+                            )
+                            continue
                         json_response[aid] = cloud_verifier_common.process_get_status(agent)
 
                     web_util.echo_json_response(self.req_handler, 200, "Success", json_response)
                 else:
                     if ("verifier" in rest_params) and (rest_params["verifier"] != ""):
                         json_response_list = (
-                            session.query(VerfierMain.agent_id).filter_by(verifier_id=rest_params["verifier"]).all()
+                            session.query(VerfierMain.agent_id)
+                            .filter_by(verifier_id=rest_params["verifier"])
+                            .filter(VerfierMain.operational_state != states.TERMINATED)
+                            .all()
                         )
                     else:
-                        json_response_list = session.query(VerfierMain.agent_id).all()
+                        json_response_list = (
+                            session.query(VerfierMain.agent_id)
+                            .filter(VerfierMain.operational_state != states.TERMINATED)
+                            .all()
+                        )
 
                     web_util.echo_json_response(self.req_handler, 200, "Success", {"uuids": json_response_list})
 
@@ -778,13 +799,21 @@ class AgentsHandler(BaseHandler):
                             raise e
 
                         if new_agent_count > 0:
-                            web_util.echo_json_response(
-                                self.req_handler,
-                                409,
-                                f"Agent of uuid {agent_id} already exists. Please use delete or update.",
-                            )
-                            logger.warning("Agent of uuid %s already exists", agent_id)
-                            return
+                            # Check if the existing agent is TERMINATED (tombstone).
+                            # TERMINATED agents are logically deleted — clean up and
+                            # allow re-enrollment.
+                            existing_agent = session.query(VerfierMain).filter_by(agent_id=agent_id).first()
+                            if existing_agent and existing_agent.operational_state == states.TERMINATED:
+                                clear_agent_policy_cache(agent_id)
+                                verifier_db_delete_agent(session, agent_id)
+                            else:
+                                web_util.echo_json_response(
+                                    self.req_handler,
+                                    409,
+                                    f"Agent of uuid {agent_id} already exists. Please use delete or update.",
+                                )
+                                logger.warning("Agent of uuid %s already exists", agent_id)
+                                return
 
                         # Write IMA policy to database if needed
                         if not runtime_policy_name and not runtime_policy:
