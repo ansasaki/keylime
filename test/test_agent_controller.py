@@ -266,11 +266,14 @@ class TestAgentControllerDelete(unittest.TestCase):
         args = controller.send_response.call_args[0]
         self.assertEqual(args[0], 404)
 
+    @patch(f"{MODULE}._cleanup_agent_named_policies")
     @patch(f"{MODULE}.clear_agent_policy_cache")
     @patch(f"{MODULE}.config")
     @patch(f"{MODULE}.cloud_verifier_common")
     @patch(f"{MODULE}.VerifierAgentModel")
-    def test_delete_v3_pull_active_returns_202(self, mock_agent_model, mock_cvc, mock_config, _mock_clear_cache):
+    def test_delete_v3_pull_active_returns_202(
+        self, mock_agent_model, mock_cvc, mock_config, _mock_clear_cache, _mock_cleanup
+    ):
         """Test that v3 delete of active pull-mode agent returns 202."""
         controller = _v3_controller()
         controller.send_response = MagicMock()
