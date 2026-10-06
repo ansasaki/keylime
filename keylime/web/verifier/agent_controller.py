@@ -357,7 +357,14 @@ class AgentController(Controller):
                 self.send_response(204)
             else:
                 agent.change("operational_state", states.TERMINATED)  # type: ignore[no-untyped-call]
+                # Eagerly clean up UUID-named (ad-hoc) policies so they
+                # appear deleted together with the agent.  Null out the
+                # FKs first so _cleanup_agent_named_policies sees this
+                # agent as no longer referencing the policy.
+                agent.change("ima_policy_id", None)  # type: ignore[no-untyped-call]
+                agent.change("mb_policy_id", None)  # type: ignore[no-untyped-call]
                 agent.commit_changes()  # type: ignore[no-untyped-call]
+                _cleanup_agent_named_policies(agent_id)
                 self.send_response(202)
 
 

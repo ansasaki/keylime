@@ -7,7 +7,7 @@ from keylime import config, keylime_logging, signing
 from keylime.common import states
 from keylime.ima import ima
 from keylime.models.verifier import IMAPolicy, VerifierAgent
-from keylime.shared_data import get_shared_memory
+from keylime.shared_data import clear_agent_policy_cache, get_shared_memory
 from keylime.web.base import APIError, APILink, APIMessageBody, APIResource, Controller
 
 logger = keylime_logging.init_logging("verifier")
@@ -196,14 +196,23 @@ class IMAPolicyController(Controller):
         if not policy:
             APIError("not_found", f"No IMA policy with name '{name}'.").send_via(self)
             return
-        active_refs = [
-            a
-            for a in VerifierAgent.all(ima_policy_id=policy.id)  # type: ignore[attr-defined]
-            if a.operational_state != states.TERMINATED  # type: ignore[attr-defined]
-        ]
+        all_refs = list(VerifierAgent.all(ima_policy_id=policy.id))  # type: ignore[attr-defined]
+        active_refs = [a for a in all_refs if a.operational_state != states.TERMINATED]  # type: ignore[attr-defined]
         if active_refs:
             APIError("conflict", f"Policy '{name}' is referenced by one or more agents.").send_via(self)
             return
+        terminated_refs = [a for a in all_refs if a.operational_state == states.TERMINATED]  # type: ignore[attr-defined]
+        if terminated_refs:
+            # Garbage-collect TERMINATED agents that still hold FK references
+            # to this policy, otherwise the FK constraint blocks deletion.
+            from keylime.web.verifier.agent_controller import (
+                _delete_agent_v3,  # pylint: disable=import-outside-toplevel
+            )
+
+            for agent in terminated_refs:
+                logger.info("Deleting TERMINATED agent %s before policy cleanup.", agent.agent_id)  # type: ignore[attr-defined]
+                clear_agent_policy_cache(agent.agent_id)  # type: ignore[attr-defined]
+                _delete_agent_v3(agent, agent.agent_id)  # type: ignore[attr-defined]
         try:
             policy.delete(include_dependants=False)
         except IntegrityError as e:
