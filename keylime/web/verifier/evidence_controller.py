@@ -102,8 +102,14 @@ class EvidenceController(Controller):
 
         # process the request for attestation check
         try:
-            # TODO - provide better error handling around bad runtime policy
-            policy_obj = ima.deserialize_runtime_policy(runtime_policy)
+            try:
+                policy_obj = ima.deserialize_runtime_policy(runtime_policy)
+            except Exception as policy_err:
+                logger.warning("Bad runtime policy in /verify/evidence: %s", policy_err)
+                APIError("invalid_resource_data", 422).set_detail(  # type: ignore[no-untyped-call]
+                    f"Invalid runtime policy: {policy_err}"
+                ).send_via(self)
+                return ({}, failure)
             mb_policy_name = config.get("verifier", "measured_boot_policy_name", fallback="accept-all")
             failure = cloud_verifier_common.process_verify_attestation(
                 tpm_ek,

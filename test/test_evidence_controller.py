@@ -147,6 +147,41 @@ class TestEvidenceControllerVersioning(unittest.TestCase):
         args = controller.send_response.call_args[0]
         self.assertEqual(args[0], 400)
 
+    @patch(f"{MODULE}.cloud_verifier_common")
+    @patch(f"{MODULE}.ima")
+    def test_process_v3_invalid_runtime_policy_returns_422(self, mock_ima, _mock_cvc):
+        """Test that a malformed runtime policy returns 422 Unprocessable Content."""
+        controller = _v3_controller()
+        controller._api_request_body = MagicMock()  # pylint: disable=protected-access
+        controller.send_response = MagicMock()
+
+        mock_ima.deserialize_runtime_policy.side_effect = ValueError("invalid policy json")
+
+        evidence_data = {
+            "evidence_type": "tpm",
+            "data": {
+                "quote": "q",
+                "nonce": "n",
+                "hash_alg": "sha256",
+                "tpm_ek": "ek",
+                "tpm_ak": "ak",
+                "tpm_policy": "policy",
+                "runtime_policy": "bad json{{",
+            },
+        }
+
+        with self.assertRaises(StopAction):
+            controller.process(evidence=evidence_data)
+
+        controller.send_response.assert_called_once()
+        args = controller.send_response.call_args[0]
+        self.assertEqual(args[0], 422, f"Expected 422 Unprocessable, got {args[0]}")
+
+        # Detail should mention the error
+        body = args[2]
+        self.assertIn("errors", body)
+        self.assertTrue(any("invalid" in (e.get("detail") or "").lower() for e in body["errors"]))
+
 
 if __name__ == "__main__":
     unittest.main()
