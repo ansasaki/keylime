@@ -6,9 +6,14 @@ verification which validates the actual attestation evidence.
 
 Identity verification is a PUBLIC action - it allows any party to verify
 that a TPM quote is genuine without requiring authentication.
+
+NOTE: This endpoint is only available in v2 (pull-mode) deployments. In v3
+push-mode, the agent is a client — the server has no channel to request a
+TPM identity quote on demand. Callers targeting v3 deployments will receive
+410 Gone; migrate to the session-based attestation flow instead.
 """
 
-from keylime.web.base import Controller
+from keylime.web.base import APIError, Controller
 
 
 class IdentityController(Controller):
@@ -36,11 +41,17 @@ class IdentityController(Controller):
 
         This is a PUBLIC action - no authentication required.
 
-        For API v2, delegates to the legacy VerifyIdentityHandler.
-        For API v3+, returns 404 (not yet implemented).
+        For API v2 (pull-mode), delegates to the legacy VerifyIdentityHandler.
+        For API v3+ (push-mode), returns 410 Gone: in push mode the agent
+        initiates all attestation sessions so there is no server-initiated
+        identity quote channel.
         """
         if self.major_version and self.major_version <= 2:
             self._new_v2_handler().get()  # type: ignore[no-untyped-call]
         else:
-            self.respond(404)
-            # TODO: Replace with v3 implementation
+            APIError("endpoint_removed", 410).set_detail(
+                "The /verify/identity endpoint is not available in v3 push-mode "
+                "deployments. In push mode the agent initiates attestation; there "
+                "is no server-initiated identity quote request. Use the "
+                "session-based attestation flow instead."
+            ).send_via(self)
