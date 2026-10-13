@@ -106,7 +106,8 @@ class Attestation(PersistableModel):
         #     if evidence_item.data and evidence_item.data.changes:
         #         self.evidence_received_at = now
 
-        # TODO: Set verification_completed_at
+        if not self.verification_completed_at and self.evaluation and self.evaluation != "pending":
+            self.verification_completed_at = now
 
     def refresh_metadata(self):
         self._set_stage()

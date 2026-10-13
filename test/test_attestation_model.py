@@ -280,6 +280,59 @@ class TestAttestationModel(unittest.TestCase):
 
         self.assertEqual(attestation.evidence_received_at, now)
 
+    @patch("keylime.models.base.types.timestamp.Timestamp.now")
+    def test_set_timestamps_verification_completed_on_pass(self, mock_now):
+        """Test that verification_completed_at is set when evaluation becomes 'pass'."""
+        now = datetime(2025, 1, 15, 12, 0, 0, tzinfo=timezone.utc)
+        mock_now.return_value = now
+
+        attestation = Attestation.empty()
+        attestation.evaluation = "pass"
+        attestation.verification_completed_at = None
+        attestation._set_timestamps()  # pylint: disable=protected-access
+
+        self.assertEqual(attestation.verification_completed_at, now)
+
+    @patch("keylime.models.base.types.timestamp.Timestamp.now")
+    def test_set_timestamps_verification_completed_on_fail(self, mock_now):
+        """Test that verification_completed_at is set when evaluation becomes 'fail'."""
+        now = datetime(2025, 1, 15, 12, 0, 0, tzinfo=timezone.utc)
+        mock_now.return_value = now
+
+        attestation = Attestation.empty()
+        attestation.evaluation = "fail"
+        attestation.verification_completed_at = None
+        attestation._set_timestamps()  # pylint: disable=protected-access
+
+        self.assertEqual(attestation.verification_completed_at, now)
+
+    @patch("keylime.models.base.types.timestamp.Timestamp.now")
+    def test_set_timestamps_verification_completed_not_set_while_pending(self, mock_now):
+        """Test that verification_completed_at is NOT set while evaluation is 'pending'."""
+        now = datetime(2025, 1, 15, 12, 0, 0, tzinfo=timezone.utc)
+        mock_now.return_value = now
+
+        attestation = Attestation.empty()
+        attestation.evaluation = "pending"
+        attestation.verification_completed_at = None
+        attestation._set_timestamps()  # pylint: disable=protected-access
+
+        self.assertIsNone(attestation.verification_completed_at)
+
+    @patch("keylime.models.base.types.timestamp.Timestamp.now")
+    def test_set_timestamps_verification_completed_not_overwritten(self, mock_now):
+        """Test that verification_completed_at is not overwritten once set."""
+        now = datetime(2025, 1, 15, 12, 0, 0, tzinfo=timezone.utc)
+        earlier = datetime(2025, 1, 15, 11, 0, 0, tzinfo=timezone.utc)
+        mock_now.return_value = now
+
+        attestation = Attestation.empty()
+        attestation.evaluation = "pass"
+        attestation.verification_completed_at = earlier  # Already set
+        attestation._set_timestamps()  # pylint: disable=protected-access
+
+        self.assertEqual(attestation.verification_completed_at, earlier)
+
     def test_get_latest_class_method(self):
         """Test that get_latest calls get with correct parameters"""
         with patch.object(Attestation, "get") as mock_get:
@@ -309,9 +362,10 @@ class TestAttestationModel(unittest.TestCase):
         """Test that refresh_metadata calls both _set_stage and _set_timestamps"""
         attestation = Attestation.empty()
 
-        with patch.object(attestation, "_set_stage") as mock_set_stage, patch.object(
-            attestation, "_set_timestamps"
-        ) as mock_set_timestamps:
+        with (
+            patch.object(attestation, "_set_stage") as mock_set_stage,
+            patch.object(attestation, "_set_timestamps") as mock_set_timestamps,
+        ):
             attestation.refresh_metadata()
 
             mock_set_stage.assert_called_once()
