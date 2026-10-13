@@ -1,9 +1,13 @@
 # pyright: reportAttributeAccessIssue=false
 # ORM model with dynamically-created attributes from metaclasses
+from typing import Optional
+
 from keylime.models.base import *
 
 
 class VerifierAgent(PersistableModel):
+    operational_state: Optional[int]
+
     @classmethod
     def _schema(cls):
         # Lazy import to avoid circular dependency

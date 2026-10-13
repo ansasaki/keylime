@@ -3,6 +3,8 @@
 # ORM model with dynamically-created attributes from metaclasses
 from datetime import timedelta
 
+from sqlalchemy import and_
+
 from keylime import config, keylime_logging
 from keylime.models.base import *
 
@@ -308,6 +310,35 @@ class Attestation(PersistableModel):
                 self._previous_attestation = attestation
 
         return self._previous_attestation
+
+    def cleanup_stale_priors(self):
+        """Delete prior attestations for this agent that are stuck in an incomplete state.
+
+        Stale records are those where evidence was never received or verification never
+        completed, leaving the attestation permanently blocked in an intermediate stage.
+        Only truly stuck records are removed:
+        - "awaiting_evidence" with no evidence received (client never delivered evidence)
+        - "evaluating_evidence" with no verification completed (got stuck mid-evaluation)
+
+        Completed (pass/fail) attestations are NOT deleted — only intermediate ones.
+        """
+        if not self.agent_id or self.index is None:
+            return
+
+        # Use db_mapping columns for SQLAlchemy expressions (ModelField has no .is_() method)
+        dm = Attestation.db_mapping
+        # pylint: disable=comparison-with-callable  # ORM framework pattern for querying
+        Attestation.delete_all(
+            and_(
+                dm.agent_id == self.agent_id,
+                dm.index < self.index,
+                or_(
+                    and_(dm.stage == "awaiting_evidence", dm.evidence_received_at.is_(None)),
+                    and_(dm.stage == "evaluating_evidence", dm.verification_completed_at.is_(None)),
+                ),
+            )
+        )
+        # pylint: enable=comparison-with-callable
 
     @property
     def previous_authenticated_attestation(self):

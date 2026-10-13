@@ -293,10 +293,9 @@ class AttestationController(Controller):
                 f"Cannot create attestation for agent '{agent_id}' while another creation attempt is in progress."
             ).send_via(self)
 
-        # TODO: Re-enable:
-        # # The attestation was created successfully, so delete any previous attestation for which evidence was never
-        # # received or for which verification never completed
-        # attestation_record.cleanup_stale_priors()
+        # Delete any prior attestation for which evidence was never received or for which
+        # verification never completed, to prevent stale intermediate records accumulating
+        attestation_record.cleanup_stale_priors()
 
         log_data = (attestation_record.index, agent_id)
         logger.info("Created attestation %s for agent '%s', sending chosen parameters", *log_data)

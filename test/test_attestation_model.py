@@ -1044,5 +1044,53 @@ class TestVerifierAgentLatestAttestation(unittest.TestCase):
             self.assertEqual(mock_get.call_count, 2)
 
 
+class TestCleanupStalePriors(unittest.TestCase):
+    """Tests for Attestation.cleanup_stale_priors()."""
+
+    def setUp(self):
+        """Initialize DB so Attestation.process_schema() can run."""
+        # pylint: disable=protected-access
+        db_manager._engine = create_engine("sqlite:///:memory:", connect_args={"check_same_thread": False})
+        db_manager._registry = registry()
+        db_manager._service = "test"
+        # pylint: enable=protected-access
+        Attestation.process_schema()
+        VerifierAgent.process_schema()
+        EvidenceItem.process_schema()
+        db_manager.registry.metadata.create_all(db_manager.engine)
+
+    @patch.object(Attestation, "delete_all")
+    def test_cleanup_calls_delete_all_with_agent_and_index(self, mock_delete_all):
+        """cleanup_stale_priors must call delete_all to remove prior stale records."""
+        attestation = Attestation.empty()
+        attestation.agent_id = "test-agent"
+        attestation.index = 3
+
+        attestation.cleanup_stale_priors()
+
+        mock_delete_all.assert_called_once()
+
+    @patch.object(Attestation, "delete_all")
+    def test_cleanup_noop_without_agent_id(self, mock_delete_all):
+        """cleanup_stale_priors must be a no-op if agent_id is not set."""
+        attestation = Attestation.empty()
+        attestation.index = 0
+
+        attestation.cleanup_stale_priors()
+
+        mock_delete_all.assert_not_called()
+
+    @patch.object(Attestation, "delete_all")
+    def test_cleanup_noop_without_index(self, mock_delete_all):
+        """cleanup_stale_priors must be a no-op if index is not set."""
+        attestation = Attestation.empty()
+        attestation.agent_id = "test-agent"
+        # index defaults to None
+
+        attestation.cleanup_stale_priors()
+
+        mock_delete_all.assert_not_called()
+
+
 if __name__ == "__main__":
     unittest.main()
