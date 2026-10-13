@@ -10,6 +10,9 @@ logger = keylime_logging.init_logging("verifier")
 
 
 class EvidenceItem(PersistableModel):
+    evidence_class: str
+    evidence_type: str
+
     @classmethod
     def _schema(cls):
         # Lazy import to avoid circular dependency

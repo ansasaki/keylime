@@ -129,9 +129,25 @@ class EngineDriver:
                     f"'evidence_requested' list"
                 )
 
-        # TODO: finalise evidence requested
+        # Finalise: validate types, deduplicate, and replace the evidence collection
+        finalised: list[Any] = []
+        seen: set[tuple[str, str]] = set()
+        for item in evidence_requested:
+            # All items must be EvidenceItem instances (engines should only append these)
+            from keylime.models.verifier import EvidenceItem  # pylint: disable=import-outside-toplevel
+
+            if not isinstance(item, EvidenceItem):
+                raise TypeError(
+                    f"Evidence item from engine has unexpected type {type(item).__name__!r}; "
+                    "engines must only append EvidenceItem instances to evidence_requested"
+                )
+            key = (item.evidence_class, item.evidence_type)
+            if key not in seen:
+                seen.add(key)
+                finalised.append(item)
+
         self.attestation.evidence.clear()  # type: ignore[attr-defined]
-        self.attestation.evidence.update(evidence_requested)  # type: ignore[attr-defined]
+        self.attestation.evidence.update(finalised)  # type: ignore[attr-defined]
         self.attestation.refresh_metadata()  # type: ignore[no-untyped-call]
         self.attestation.validate_parameters()  # type: ignore[no-untyped-call]
 
