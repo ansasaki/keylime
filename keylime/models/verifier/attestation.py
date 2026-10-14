@@ -126,11 +126,6 @@ class Attestation(PersistableModel):
         self.evaluation = "pending"
         self.refresh_metadata()
 
-        # TODO: move to verification engine
-        # last_attestation = Attestation.get_latest(agent.agent_id)
-        # if not last_attestation and agent.next_ima_ml_entry:
-        #     attestation.starting_ima_offset = agent.next_ima_ml_entry
-
     def receive_capabilities(self, data):
         # Lazy import to avoid circular dependency
         import keylime.models.verifier as verifier_models  # pylint: disable=import-outside-toplevel

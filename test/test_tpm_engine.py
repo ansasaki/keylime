@@ -594,5 +594,47 @@ class TestTPMEngineExpectsImaLog(unittest.TestCase):
         self.assertFalse(engine.expects_ima_log)
 
 
+class TestTPMEngineDetermineIMAOffset(unittest.TestCase):
+    """Tests for the pull-to-push migration path in _determine_ima_offset."""
+
+    def _create_engine_with_agent(self, next_ima_ml_entry=None):
+        """Create a TPMEngine where there is no previous v3 attestation."""
+        mock_attestation = MagicMock()
+        mock_attestation.system_info = MagicMock()
+        mock_attestation.system_info.boot_time = "2025-01-01T00:00:00"
+        # No previous v3 attestation — simulate first push-mode attestation
+        mock_attestation.previous_passed_attestation = None
+
+        mock_agent = MagicMock()
+        mock_agent.next_ima_ml_entry = next_ima_ml_entry
+        mock_attestation.agent = mock_agent
+
+        return TPMEngine(mock_attestation)
+
+    def test_uses_next_ima_ml_entry_when_no_prior_v3_attestation(self):
+        """First v3 attestation should resume from agent.next_ima_ml_entry if set."""
+        engine = self._create_engine_with_agent(next_ima_ml_entry=42)
+
+        evidence_item = MagicMock()
+        evidence_item.capabilities = MagicMock()
+        evidence_item.capabilities.entry_count = 100
+
+        with patch.object(type(engine), "expects_ima_log", new_callable=lambda: property(lambda self: True)):
+            offset = engine._determine_ima_offset(evidence_item)  # pylint: disable=protected-access
+        self.assertEqual(offset, 42)
+
+    def test_defaults_to_zero_when_next_ima_ml_entry_is_none(self):
+        """First v3 attestation with no pull-mode offset should start from 0."""
+        engine = self._create_engine_with_agent(next_ima_ml_entry=None)
+
+        evidence_item = MagicMock()
+        evidence_item.capabilities = MagicMock()
+        evidence_item.capabilities.entry_count = 100
+
+        with patch.object(type(engine), "expects_ima_log", new_callable=lambda: property(lambda self: True)):
+            offset = engine._determine_ima_offset(evidence_item)  # pylint: disable=protected-access
+        self.assertEqual(offset, 0)
+
+
 if __name__ == "__main__":
     unittest.main()

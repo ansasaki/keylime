@@ -413,7 +413,13 @@ class TPMEngine(VerificationEngine):
         starting_offset = 0
 
         if not prev_att or not prev_att.system_info or not prev_att.system_info.boot_time:
-            starting_offset = 0
+            # Pull-to-push migration: if a pull-mode IMA offset was recorded on the
+            # agent, resume from there rather than re-verifying the entire log from 0
+            agent = self.attestation.agent  # type: ignore[attr-defined]
+            if agent and agent.next_ima_ml_entry:
+                starting_offset = agent.next_ima_ml_entry
+            else:
+                starting_offset = 0
         elif self.attestation.system_info.boot_time > prev_att.system_info.boot_time:
             starting_offset = 0
         elif self.attestation.system_info.boot_time == prev_att.system_info.boot_time:
