@@ -245,9 +245,12 @@ class AgentAttestStates:
     @staticmethod
     def get_instance() -> "AgentAttestStates":
         """Create and return a singleton AgentAttestState"""
-        if not AgentAttestStates.instance:
+        if AgentAttestStates.instance is None:
             AgentAttestStates.instance = AgentAttestStates()
-        return AgentAttestStates.instance
+        result = AgentAttestStates.instance
+        if result is None:
+            raise RuntimeError("AgentAttestStates singleton failed to initialize")
+        return result
 
     def __init__(self) -> None:
         """constructor"""
