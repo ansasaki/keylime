@@ -803,7 +803,9 @@ class AgentsHandler(BaseHandler):
                             # TERMINATED agents are logically deleted — clean up and
                             # allow re-enrollment.
                             existing_agent = session.query(VerfierMain).filter_by(agent_id=agent_id).first()
-                            if existing_agent and existing_agent.operational_state == states.TERMINATED:
+                            if (
+                                existing_agent and existing_agent.operational_state == states.TERMINATED
+                            ):  # pyright: ignore[reportGeneralTypeIssues]
                                 clear_agent_policy_cache(agent_id)
                                 verifier_db_delete_agent(session, agent_id)
                             else:
