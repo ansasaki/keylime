@@ -54,8 +54,10 @@ class AuthSession(PersistableModel):
 
     @classmethod
     def _schema(cls):
-        # TODO: Uncomment
-        # cls._belongs_to("agent", VerifierAgent, inverse_of="sessions", preload = False)
+        # Lazy import to avoid circular dependency
+        import keylime.models.verifier as verifier_models  # pylint: disable=import-outside-toplevel
+
+        cls._belongs_to("agent", verifier_models.VerifierAgent, inverse_of="sessions", preload=False)
 
         cls._persist_as("sessions")
         # session_id is a UUID for clean URLs (36 chars), also embedded in token for O(1) lookup
@@ -68,7 +70,7 @@ class AuthSession(PersistableModel):
         # Token format: {session_id}.{secret} - allows parsing session_id for O(1) lookup
         cls._virtual("token", String(128))
         cls._field("active", Boolean)
-        cls._field("agent_id", String(80))
+        cls._field("agent_id", String(80), refers_to="agent.agent_id")  # pylint: disable=unexpected-keyword-arg
         cls._field("nonce", Nonce)
         cls._field("nonce_created_at", Timestamp)
         cls._field("nonce_expires_at", Timestamp)

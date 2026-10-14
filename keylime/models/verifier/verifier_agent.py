@@ -22,6 +22,7 @@ class VerifierAgent(PersistableModel):
         cls._belongs_to("mb_policy", verifier_models.MBPolicy)
         cls._field("mb_policy_id", Integer, refers_to="mb_policy.id")  # pylint: disable=unexpected-keyword-arg
         cls._has_many("attestations", verifier_models.Attestation, preload=False)
+        cls._has_many("sessions", verifier_models.AuthSession, preload=False)
 
         # The attestation key (AK) used by the TPM to sign attestations
         cls._field("ak_tpm", Binary(persist_as=String(500)))

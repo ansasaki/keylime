@@ -5,8 +5,13 @@ import unittest
 from datetime import timedelta
 from unittest.mock import MagicMock, PropertyMock, patch
 
+from sqlalchemy import create_engine
+from sqlalchemy.orm import registry as sa_registry
+
 from keylime.crypto import generate_session_token, generate_token_salt, hash_token_for_storage
+from keylime.models import db_manager
 from keylime.models.base.types import Timestamp
+from keylime.models.verifier import Attestation, EvidenceItem, VerifierAgent
 from keylime.models.verifier.auth_session import AuthSession
 from keylime.shared_data import cleanup_global_shared_memory, get_shared_memory
 
@@ -231,9 +236,12 @@ class TestAuthSessionHelpers(unittest.TestCase):
         }
 
         # Mock the metaclass properties
-        with patch.object(
-            type(AuthSession), "schema_awaiting_processing", new_callable=PropertyMock, return_value=False
-        ), patch.object(type(AuthSession), "db_table", new_callable=PropertyMock) as mock_db_table:
+        with (
+            patch.object(
+                type(AuthSession), "schema_awaiting_processing", new_callable=PropertyMock, return_value=False
+            ),
+            patch.object(type(AuthSession), "db_table", new_callable=PropertyMock) as mock_db_table,
+        ):
             # Set up db_table mock
             mock_table = MagicMock()
             mock_table.columns = {"agent_id": MagicMock(), "active": MagicMock()}
@@ -270,9 +278,12 @@ class TestAuthSessionHelpers(unittest.TestCase):
         }
 
         # Mock the metaclass properties
-        with patch.object(
-            type(AuthSession), "schema_awaiting_processing", new_callable=PropertyMock, return_value=False
-        ), patch.object(type(AuthSession), "db_table", new_callable=PropertyMock) as mock_db_table:
+        with (
+            patch.object(
+                type(AuthSession), "schema_awaiting_processing", new_callable=PropertyMock, return_value=False
+            ),
+            patch.object(type(AuthSession), "db_table", new_callable=PropertyMock) as mock_db_table,
+        ):
             # Set up db_table mock
             mock_table = MagicMock()
             mock_table.columns = {"agent_id": MagicMock(), "active": MagicMock()}
@@ -310,9 +321,12 @@ class TestAuthSessionHelpers(unittest.TestCase):
         }
 
         # Mock the metaclass properties
-        with patch.object(
-            type(AuthSession), "schema_awaiting_processing", new_callable=PropertyMock, return_value=False
-        ), patch.object(type(AuthSession), "db_table", new_callable=PropertyMock) as mock_db_table:
+        with (
+            patch.object(
+                type(AuthSession), "schema_awaiting_processing", new_callable=PropertyMock, return_value=False
+            ),
+            patch.object(type(AuthSession), "db_table", new_callable=PropertyMock) as mock_db_table,
+        ):
             # Set up db_table mock
             mock_table = MagicMock()
             mock_table.columns = {"agent_id": MagicMock(), "active": MagicMock()}
@@ -674,6 +688,40 @@ class TestAuthSessionDeleteStale(unittest.TestCase):
 
         # Note: Current implementation has a bug - it deletes if NOT expired
         # This test documents the current behavior
+
+
+class TestAuthSessionSchema(unittest.TestCase):
+    """Test that AuthSession schema declares the agent relationship correctly."""
+
+    def setUp(self):
+        """Initialize in-memory DB so process_schema() can run."""
+        # pylint: disable=protected-access
+        db_manager._engine = create_engine("sqlite:///:memory:", connect_args={"check_same_thread": False})
+        db_manager._registry = sa_registry()
+        db_manager._service = "test"
+        # pylint: enable=protected-access
+        AuthSession.process_schema()
+        VerifierAgent.process_schema()
+        Attestation.process_schema()
+        EvidenceItem.process_schema()
+        db_manager.registry.metadata.create_all(db_manager.engine)
+
+    def test_agent_id_field_declared_with_refers_to(self):
+        """The agent_id field must have a refers_to declaration for the ORM FK join."""
+        field = AuthSession.fields.get("agent_id")
+        self.assertIsNotNone(field, "agent_id field must exist on AuthSession")
+        self.assertIsNotNone(
+            getattr(field, "refers_to", None),
+            "agent_id must have refers_to='agent.agent_id' for the belongs_to relationship",
+        )
+
+    def test_belongs_to_agent_association_declared(self):
+        """AuthSession must declare a belongs_to association named 'agent'."""
+        self.assertIn(
+            "agent",
+            AuthSession.belongs_to_associations,
+            "AuthSession must have a belongs_to 'agent' association",
+        )
 
 
 if __name__ == "__main__":
